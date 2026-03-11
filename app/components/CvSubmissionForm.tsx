@@ -16,6 +16,7 @@ type FormValues = {
   lastName: string;
   email: string;
   phone: string;
+  idOrPassportNumber: string;
   jobOpening: string;
   resume: File | null;
 };
@@ -25,6 +26,7 @@ const INITIAL_VALUES: FormValues = {
   lastName: "",
   email: "",
   phone: "",
+  idOrPassportNumber: "",
   jobOpening: JOB_OPENINGS[0],
   resume: null,
 };
@@ -169,6 +171,24 @@ export function CvSubmissionForm() {
             <p className="text-sm text-[#7c7c7c]">
               The hiring team may use this number to contact you about this job.
             </p>
+          </div>
+
+          <div className="space-y-3">
+            <label
+              htmlFor="idOrPassportNumber"
+              className="block text-sm font-semibold text-[#4d4d4d]"
+            >
+              ID or Passport Number <span className="text-[#d24a43]">*</span>
+            </label>
+            <input
+              id="idOrPassportNumber"
+              type="text"
+              value={values.idOrPassportNumber}
+              onChange={(event) =>
+                updateValue("idOrPassportNumber", event.target.value)
+              }
+              className="w-full py-3 px-2 rounded-lg border border-[#d9d2c7] text-sm text-[#171717] outline-none transition focus:border-[#d38133] focus:ring-4 focus:ring-[#f3d8bc]"
+            />
           </div>
         </div>
 
