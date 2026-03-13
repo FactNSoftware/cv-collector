@@ -34,6 +34,9 @@ const INITIAL_VALUES: FormValues = {
 export function CvSubmissionForm() {
   const [values, setValues] = useState<FormValues>(INITIAL_VALUES);
   const [isDragging, setIsDragging] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [submitSuccess, setSubmitSuccess] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const updateValue = (
@@ -51,8 +54,53 @@ export function CvSubmissionForm() {
     updateResume(event.target.files?.[0] ?? null);
   };
 
-  const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    setSubmitError("");
+    setSubmitSuccess("");
+
+    if (!values.resume) {
+      setSubmitError("Please upload your resume as a PDF.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("firstName", values.firstName.trim());
+      formData.append("lastName", values.lastName.trim());
+      formData.append("email", values.email.trim());
+      formData.append("phone", values.phone.trim());
+      formData.append("idOrPassportNumber", values.idOrPassportNumber.trim());
+      formData.append("jobOpening", values.jobOpening);
+      formData.append("resume", values.resume);
+
+      const response = await fetch("/api/cv", {
+        method: "POST",
+        body: formData,
+      });
+
+      const payload = await response
+        .json()
+        .catch(() => ({ message: "Failed to submit application." }));
+
+      if (!response.ok) {
+        setSubmitError(payload.message || "Failed to submit application.");
+        return;
+      }
+
+      setValues(INITIAL_VALUES);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      setSubmitSuccess("Application submitted successfully.");
+    } catch {
+      setSubmitError("Something went wrong while submitting. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -105,6 +153,7 @@ export function CvSubmissionForm() {
               <input
                 id="firstName"
                 type="text"
+                required
                 value={values.firstName}
                 onChange={(event) =>
                   updateValue("firstName", event.target.value)
@@ -123,6 +172,7 @@ export function CvSubmissionForm() {
               <input
                 id="lastName"
                 type="text"
+                required
                 value={values.lastName}
                 onChange={(event) =>
                   updateValue("lastName", event.target.value)
@@ -142,6 +192,7 @@ export function CvSubmissionForm() {
             <input
               id="email"
               type="email"
+              required
               value={values.email}
               onChange={(event) => updateValue("email", event.target.value)}
               className="w-full py-3 px-2 rounded-lg border border-[#d9d2c7] text-sm text-[#171717] outline-none transition focus:border-[#d38133] focus:ring-4 focus:ring-[#f3d8bc]"
@@ -162,6 +213,7 @@ export function CvSubmissionForm() {
               <input
                 id="phone"
                 type="tel"
+                required
                 value={values.phone}
                 onChange={(event) => updateValue("phone", event.target.value)}
                 placeholder="+94"
@@ -183,6 +235,7 @@ export function CvSubmissionForm() {
             <input
               id="idOrPassportNumber"
               type="text"
+              required
               value={values.idOrPassportNumber}
               onChange={(event) =>
                 updateValue("idOrPassportNumber", event.target.value)
@@ -229,6 +282,7 @@ export function CvSubmissionForm() {
             ref={fileInputRef}
             type="file"
             accept=".pdf"
+            required
             onChange={handleFileSelection}
             className="hidden"
           />
@@ -237,11 +291,22 @@ export function CvSubmissionForm() {
         <div>
           <button
             type="submit"
+            disabled={isSubmitting}
             className="flex h-12 w-full cursor-pointer items-center justify-center rounded-lg bg-[#01371B] text-base font-medium text-[#A3E42F] transition hover:bg-[#262626] focus:outline-none focus:ring-4 focus:ring-[#d9d9d9]"
           >
-            Submit Application
+            {isSubmitting ? "Submitting..." : "Submit Application"}
           </button>
         </div>
+
+        {(submitError || submitSuccess) && (
+          <p
+            className={`text-sm ${
+              submitError ? "text-[#d24a43]" : "text-[#19692c]"
+            }`}
+          >
+            {submitError || submitSuccess}
+          </p>
+        )}
 
         <p className="text-xs  text-[#777777]">
           By clicking &apos;Submit Application&apos;, you agree to receive job

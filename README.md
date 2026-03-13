@@ -1,36 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CV Collector (Azure)
 
-## Getting Started
+This is a full-stack Next.js app (frontend + API routes) refactored for Azure services.
 
-First, run the development server:
+Current platform services:
+
+- Azure App Service (hosting)
+- Azure Cosmos DB (application data)
+- Azure Blob Storage (CV files)
+- Azure Communication Services Email (OTP email delivery)
+
+## Local Development
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Copy `.env.example` to `.env` and set values.
+
+3. Run the app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Required Environment Variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `AZURE_COSMOS_ENDPOINT`
+- `AZURE_COSMOS_KEY`
+- `AZURE_COSMOS_DATABASE`
+- `AZURE_COSMOS_CONTAINER`
+- `AZURE_BLOB_CONNECTION_STRING`
+- `AZURE_BLOB_CONTAINER`
+- `AZURE_COMMUNICATION_CONNECTION_STRING`
+- `AZURE_EMAIL_SENDER_ADDRESS`
+- `AUTH_SECRET`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Cosmos DB Container Design
 
-## Learn More
+The app stores multiple document types in one container.
 
-To learn more about Next.js, take a look at the following resources:
+- Database: value from `AZURE_COSMOS_DATABASE`
+- Container: value from `AZURE_COSMOS_CONTAINER`
+- Partition key: `/scope`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Document scopes:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `auth` for OTP/session documents
+- `cv` for CV submissions and uniqueness lock records
 
-## Deploy on Vercel
+## Deploy to Azure App Service
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+This repo includes GitHub Actions workflow `.github/workflows/azure-webapp.yml`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### One-time Azure Setup
+
+1. Create Azure App Service (Linux, Node 20).
+2. Configure startup command:
+
+```bash
+node server.js
+```
+
+3. In App Service -> Environment variables, add all required env values.
+
+4. Create GitHub repository secrets:
+
+- `AZURE_CREDENTIALS`
+- `AZURE_WEBAPP_NAME`
+
+`AZURE_CREDENTIALS` should be service principal JSON with permission to deploy to the target web app.
+
+### Deploy Flow
+
+- Pull requests: lint + build validation.
+- Push to `main`: lint + build + deploy to Azure App Service.
+
+## Notes
+
+- The app uses Next.js standalone output for App Service deployment packaging.
+- Keep `.env` local only; `.env*` files are ignored except `.env.example`.

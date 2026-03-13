@@ -9,6 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@azure/communication-email": "^1.0.0",
+    "@azure/cosmos": "^4.5.1",
+    "@azure/storage-blob": "^12.29.1",
     "lucide-react": "^0.577.0",
     "next": "16.1.6",
     "react": "19.2.3",
