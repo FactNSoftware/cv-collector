@@ -3,6 +3,7 @@ import { BlobServiceClient, ContainerClient } from "@azure/storage-blob";
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const REQUIRED_ENV_NAMES = [
+  "AZURE_STORAGE_CONNECTION_STRING",
   "AZURE_BLOB_CONNECTION_STRING",
   "AZURE_BLOB_CONTAINER",
 ] as const;
@@ -34,11 +35,23 @@ const getBlobContainerClient = async (): Promise<ContainerClient> => {
     return containerClientCache;
   }
 
-  const connectionString = process.env.AZURE_BLOB_CONNECTION_STRING;
+  const connectionString =
+    process.env.AZURE_STORAGE_CONNECTION_STRING
+    || process.env.AZURE_BLOB_CONNECTION_STRING;
   const containerName = process.env.AZURE_BLOB_CONTAINER;
-  const missing = REQUIRED_ENV_NAMES.filter((name) => !process.env[name]);
+  const missing = REQUIRED_ENV_NAMES.filter((name) => {
+    if (name === "AZURE_BLOB_CONNECTION_STRING") {
+      return !connectionString;
+    }
 
-  if (missing.length > 0) {
+    if (name === "AZURE_STORAGE_CONNECTION_STRING") {
+      return !connectionString;
+    }
+
+    return !process.env[name];
+  });
+
+  if (!connectionString || !containerName) {
     throw new Error(
       `Azure Blob Storage configuration is missing. Set: ${missing.join(", ")}`,
     );

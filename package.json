@@ -4,13 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
     "@azure/communication-email": "^1.0.0",
-    "@azure/cosmos": "^4.5.1",
+    "@azure/data-tables": "^13.3.1",
     "@azure/storage-blob": "^12.29.1",
     "lucide-react": "^0.577.0",
     "next": "16.1.6",

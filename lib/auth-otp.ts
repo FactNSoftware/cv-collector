@@ -1,6 +1,6 @@
 import { createHash, randomInt } from "crypto";
 import { EmailClient } from "@azure/communication-email";
-import { getAppContainer, isCosmosNotFoundError } from "./azure-cosmos";
+import { getAppTableClient, isTableNotFoundError } from "./azure-tables";
 import { buildOtpEmailTemplate } from "./otp-email-template";
 
 const AUTH_SECRET_ENV = "AUTH_SECRET";
@@ -19,6 +19,18 @@ export class OtpValidationError extends Error {
     this.name = "OtpValidationError";
   }
 }
+
+type OtpEntity = {
+  partitionKey: string;
+  rowKey: string;
+  type: string;
+  email: string;
+  codeHash: string;
+  attempts: number;
+  createdAt: number;
+  expiresAt: number;
+  updatedAt?: number;
+};
 
 const getAuthSecret = () => {
   const secret = process.env[AUTH_SECRET_ENV];
@@ -126,19 +138,19 @@ export const sendLoginOtp = async (email: string) => {
   const otpCode = createOtpCode();
   await sendOtpEmail(normalizedEmail, otpCode);
 
-  const container = getAppContainer();
+  const tableClient = await getAppTableClient();
   const expiresAt = Date.now() + OTP_TTL_MS;
 
-  await container.items.upsert({
-    id: toOtpDocId(normalizedEmail),
-    scope: OTP_SCOPE,
+  await tableClient.upsertEntity<OtpEntity>({
+    partitionKey: OTP_SCOPE,
+    rowKey: toOtpDocId(normalizedEmail),
     type: OTP_TYPE,
     email: normalizedEmail,
     codeHash: hashOtpCode(normalizedEmail, otpCode),
     attempts: 0,
     createdAt: Date.now(),
     expiresAt,
-  });
+  }, "Replace");
 };
 
 export const verifyLoginOtp = async (email: string, otpCode: string) => {
@@ -153,17 +165,14 @@ export const verifyLoginOtp = async (email: string, otpCode: string) => {
     throw new OtpValidationError("OTP must be a 6-digit code.");
   }
 
-  const container = getAppContainer();
+  const tableClient = await getAppTableClient();
   const otpId = toOtpDocId(normalizedEmail);
-  let data: Record<string, unknown> | undefined;
+  let data: OtpEntity | undefined;
 
   try {
-    const response = await container
-      .item(otpId, OTP_SCOPE)
-      .read<Record<string, unknown>>();
-    data = response.resource;
+    data = await tableClient.getEntity<OtpEntity>(OTP_SCOPE, otpId);
   } catch (error) {
-    if (isCosmosNotFoundError(error)) {
+    if (isTableNotFoundError(error)) {
       throw new OtpValidationError("OTP not found. Please request a new code.");
     }
 
@@ -177,38 +186,36 @@ export const verifyLoginOtp = async (email: string, otpCode: string) => {
   const savedEmail = String(data?.email ?? "");
 
   if (!Number.isFinite(expiresAt) || !savedHash || docType !== OTP_TYPE || savedEmail !== normalizedEmail) {
-    await container.item(otpId, OTP_SCOPE).delete();
+    await tableClient.deleteEntity(OTP_SCOPE, otpId);
     throw new OtpValidationError("OTP is invalid. Please request a new code.");
   }
 
   if (expiresAt <= Date.now()) {
-    await container.item(otpId, OTP_SCOPE).delete();
+    await tableClient.deleteEntity(OTP_SCOPE, otpId);
     throw new OtpValidationError("OTP expired. Please request a new code.");
   }
 
   if (attempts >= OTP_MAX_ATTEMPTS) {
-    await container.item(otpId, OTP_SCOPE).delete();
+    await tableClient.deleteEntity(OTP_SCOPE, otpId);
     throw new OtpValidationError("Too many failed attempts. Request a new OTP.");
   }
 
   const providedHash = hashOtpCode(normalizedEmail, normalizedCode);
 
   if (providedHash !== savedHash) {
-    const existing = (data ?? {}) as Record<string, unknown>;
-
-    await container.item(otpId, OTP_SCOPE).replace({
-      ...existing,
-      id: otpId,
-      scope: OTP_SCOPE,
+    await tableClient.upsertEntity<OtpEntity>({
+      ...data,
+      partitionKey: OTP_SCOPE,
+      rowKey: otpId,
       type: OTP_TYPE,
       email: normalizedEmail,
       attempts: attempts + 1,
       updatedAt: Date.now(),
-    });
+    }, "Replace");
     throw new OtpValidationError("Invalid OTP code.");
   }
 
-  await container.item(otpId, OTP_SCOPE).delete();
+  await tableClient.deleteEntity(OTP_SCOPE, otpId);
 
   return {
     email: normalizedEmail,

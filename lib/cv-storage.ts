@@ -1,14 +1,13 @@
 import { randomUUID } from "crypto";
-import { OperationInput } from "@azure/cosmos";
 import {
   deleteCvUpload,
   saveCvPdf,
 } from "./cv-file-service";
 import {
-  getAppContainer,
-  isCosmosConflictError,
-  isCosmosNotFoundError,
-} from "./azure-cosmos";
+  getAppTableClient,
+  isTableConflictError,
+  isTableNotFoundError,
+} from "./azure-tables";
 
 const CV_SCOPE = "cv";
 const CV_SUBMISSION_TYPE = "submission";
@@ -48,8 +47,8 @@ export class DuplicateApplicantError extends Error {
 }
 
 type CvSubmissionDocument = {
-  id: string;
-  scope: string;
+  partitionKey: string;
+  rowKey: string;
   type: string;
   firstName: string;
   lastName: string;
@@ -65,7 +64,7 @@ type CvSubmissionDocument = {
 
 const toRecord = (submission: CvSubmissionDocument): CvSubmissionRecord => {
   return {
-    id: submission.id,
+    id: submission.rowKey.replace(/^submission:/, ""),
     firstName: submission.firstName,
     lastName: submission.lastName,
     email: submission.email,
@@ -80,7 +79,7 @@ const toRecord = (submission: CvSubmissionDocument): CvSubmissionRecord => {
 };
 
 const toSubmissionDoc = (
-  id: string,
+  rowKey: string,
   data: Record<string, unknown>,
 ): CvSubmissionDocument => {
   const submittedAtValue = Number(data.submittedAt ?? 0);
@@ -89,8 +88,8 @@ const toSubmissionDoc = (
     : Date.now();
 
   return {
-    id,
-    scope: String(data.scope ?? CV_SCOPE),
+    partitionKey: String(data.partitionKey ?? CV_SCOPE),
+    rowKey,
     type: String(data.type ?? ""),
     firstName: String(data.firstName ?? ""),
     lastName: String(data.lastName ?? ""),
@@ -105,23 +104,30 @@ const toSubmissionDoc = (
   };
 };
 
+const toSubmissionRowKey = (id: string) => `submission:${id}`;
+
 const toUniqueDocId = (prefix: "email" | "id", value: string) => {
-  return `${prefix}:${encodeURIComponent(value.trim().toLowerCase())}`;
+  return `unique:${prefix}:${encodeURIComponent(value.trim().toLowerCase())}`;
 };
 
 export const listCvSubmissions = async (): Promise<CvSubmissionRecord[]> => {
-  const container = getAppContainer();
-  const query = {
-    query: "SELECT * FROM c WHERE c.scope = @scope AND c.type = @type ORDER BY c.submittedAt DESC",
-    parameters: [
-      { name: "@scope", value: CV_SCOPE },
-      { name: "@type", value: CV_SUBMISSION_TYPE },
-    ],
-  };
+  const tableClient = await getAppTableClient();
+  const entities = tableClient.listEntities<Record<string, unknown>>({
+    queryOptions: {
+      filter: `PartitionKey eq '${CV_SCOPE}' and type eq '${CV_SUBMISSION_TYPE}'`,
+    },
+  });
 
-  const { resources } = await container.items.query<Record<string, unknown>>(query).fetchAll();
+  const resources: CvSubmissionRecord[] = [];
 
-  return resources.map((item) => toRecord(toSubmissionDoc(String(item.id ?? ""), item)));
+  for await (const entity of entities) {
+    const rowKey = String(entity.rowKey ?? "");
+    resources.push(toRecord(toSubmissionDoc(rowKey, entity)));
+  }
+
+  return resources.sort((left, right) => (
+    new Date(right.submittedAt).getTime() - new Date(left.submittedAt).getTime()
+  ));
 };
 
 export const getCvSubmissionById = async (
@@ -131,14 +137,14 @@ export const getCvSubmissionById = async (
     return null;
   }
 
-  const container = getAppContainer();
+  const tableClient = await getAppTableClient();
 
   try {
-    const response = await container
-      .item(id, CV_SCOPE)
-      .read<Record<string, unknown>>();
-
-    const doc = toSubmissionDoc(id, response.resource ?? {});
+    const response = await tableClient.getEntity<Record<string, unknown>>(
+      CV_SCOPE,
+      toSubmissionRowKey(id),
+    );
+    const doc = toSubmissionDoc(toSubmissionRowKey(id), response);
 
     if (doc.type !== CV_SUBMISSION_TYPE) {
       return null;
@@ -146,7 +152,7 @@ export const getCvSubmissionById = async (
 
     return toRecord(doc);
   } catch (error) {
-    if (isCosmosNotFoundError(error)) {
+    if (isTableNotFoundError(error)) {
       return null;
     }
 
@@ -167,75 +173,49 @@ export const createCvSubmission = async (
   });
 
   try {
-    const container = getAppContainer();
+    const tableClient = await getAppTableClient();
     const submissionId = randomUUID();
     const submittedAt = Date.now();
     const normalizedIdValue = input.idOrPassportNumber.trim();
-
-    const operations: OperationInput[] = [
-      {
-        operationType: "Create",
-        resourceBody: {
-          id: toUniqueDocId("email", normalizedEmail),
-          scope: CV_SCOPE,
-          type: CV_UNIQUE_TYPE,
-          keyType: "email",
-          value: normalizedEmail,
-          submissionId,
-          createdAt: submittedAt,
-        },
-      },
-      {
-        operationType: "Create",
-        resourceBody: {
-          id: toUniqueDocId("id", normalizedIdOrPassport),
-          scope: CV_SCOPE,
-          type: CV_UNIQUE_TYPE,
-          keyType: "id",
-          value: normalizedIdOrPassport,
-          submissionId,
-          createdAt: submittedAt,
-        },
-      },
-      {
-        operationType: "Create",
-        resourceBody: {
-          id: submissionId,
-          scope: CV_SCOPE,
-          type: CV_SUBMISSION_TYPE,
-          firstName: input.firstName,
-          lastName: input.lastName,
-          email: normalizedEmail,
-          phone: input.phone,
-          idOrPassportNumber: normalizedIdValue,
-          jobOpening: input.jobOpening,
-          resumeOriginalName: input.resumeOriginalName,
-          resumeStoredName: savedFile.storedFileName,
-          resumeMimeType: savedFile.mimeType,
-          submittedAt,
-        },
-      },
-    ];
-
-    const response = await container.items.batch(operations, CV_SCOPE);
-    const operationResults = response.result ?? [];
-    const hasConflict = operationResults.some((item) => item.statusCode === 409);
-
-    if (hasConflict) {
-      throw new DuplicateApplicantError(
-        "A user with this email or ID/passport already exists.",
-      );
-    }
-
-    const hasFailure = operationResults.some((item) => item.statusCode >= 400);
-
-    if (hasFailure) {
-      throw new Error("Failed to persist CV submission in Azure Cosmos DB.");
-    }
+    await tableClient.submitTransaction([
+      ["create", {
+        partitionKey: CV_SCOPE,
+        rowKey: toUniqueDocId("email", normalizedEmail),
+        type: CV_UNIQUE_TYPE,
+        keyType: "email",
+        value: normalizedEmail,
+        submissionId,
+        createdAt: submittedAt,
+      }],
+      ["create", {
+        partitionKey: CV_SCOPE,
+        rowKey: toUniqueDocId("id", normalizedIdOrPassport),
+        type: CV_UNIQUE_TYPE,
+        keyType: "id",
+        value: normalizedIdOrPassport,
+        submissionId,
+        createdAt: submittedAt,
+      }],
+      ["create", {
+        partitionKey: CV_SCOPE,
+        rowKey: toSubmissionRowKey(submissionId),
+        type: CV_SUBMISSION_TYPE,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        email: normalizedEmail,
+        phone: input.phone,
+        idOrPassportNumber: normalizedIdValue,
+        jobOpening: input.jobOpening,
+        resumeOriginalName: input.resumeOriginalName,
+        resumeStoredName: savedFile.storedFileName,
+        resumeMimeType: savedFile.mimeType,
+        submittedAt,
+      }],
+    ]);
 
     return toRecord({
-      id: submissionId,
-      scope: CV_SCOPE,
+      partitionKey: CV_SCOPE,
+      rowKey: toSubmissionRowKey(submissionId),
       type: CV_SUBMISSION_TYPE,
       firstName: input.firstName,
       lastName: input.lastName,
@@ -255,7 +235,7 @@ export const createCvSubmission = async (
       throw error;
     }
 
-    if (isCosmosConflictError(error)) {
+    if (isTableConflictError(error)) {
       throw new DuplicateApplicantError(
         "A user with this email or ID/passport already exists.",
       );

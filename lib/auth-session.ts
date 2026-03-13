@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "crypto";
 import { cookies } from "next/headers";
-import { getAppContainer, isCosmosNotFoundError } from "./azure-cosmos";
+import { getAppTableClient, isTableNotFoundError } from "./azure-tables";
 
 const AUTH_SECRET_ENV = "AUTH_SECRET";
 const AUTH_SCOPE = "auth";
@@ -13,6 +13,15 @@ export const SESSION_COOKIE_NAME = "cv_session";
 export type AuthSession = {
   email: string;
   expiresAt: Date;
+};
+
+type AuthSessionEntity = {
+  partitionKey: string;
+  rowKey: string;
+  type: string;
+  email: string;
+  createdAt: number;
+  expiresAt: number;
 };
 
 const getAuthSecret = () => {
@@ -49,16 +58,13 @@ const getSessionTokenFromCookieHeader = (cookieHeader: string | null) => {
 };
 
 const parseSessionFromDoc = async (tokenHash: string) => {
-  const container = getAppContainer();
-  let data: Record<string, unknown> | undefined;
+  const tableClient = await getAppTableClient();
+  let data: AuthSessionEntity | undefined;
 
   try {
-    const response = await container
-      .item(tokenHash, AUTH_SCOPE)
-      .read<Record<string, unknown>>();
-    data = response.resource;
+    data = await tableClient.getEntity<AuthSessionEntity>(AUTH_SCOPE, tokenHash);
   } catch (error) {
-    if (isCosmosNotFoundError(error)) {
+    if (isTableNotFoundError(error)) {
       return null;
     }
 
@@ -70,12 +76,12 @@ const parseSessionFromDoc = async (tokenHash: string) => {
   const docType = String(data?.type ?? "");
 
   if (!email || !Number.isFinite(expiresAtMs) || docType !== AUTH_SESSION_TYPE) {
-    await container.item(tokenHash, AUTH_SCOPE).delete();
+    await tableClient.deleteEntity(AUTH_SCOPE, tokenHash);
     return null;
   }
 
   if (expiresAtMs <= Date.now()) {
-    await container.item(tokenHash, AUTH_SCOPE).delete();
+    await tableClient.deleteEntity(AUTH_SCOPE, tokenHash);
     return null;
   }
 
@@ -95,16 +101,16 @@ export const createAuthSession = async (email: string) => {
   const sessionToken = randomBytes(32).toString("hex");
   const sessionTokenHash = hashWithSecret(sessionToken);
   const expiresAtMs = Date.now() + SESSION_TTL_MS;
-  const container = getAppContainer();
+  const tableClient = await getAppTableClient();
 
-  await container.items.upsert({
-    id: sessionTokenHash,
-    scope: AUTH_SCOPE,
+  await tableClient.upsertEntity<AuthSessionEntity>({
+    partitionKey: AUTH_SCOPE,
+    rowKey: sessionTokenHash,
     type: AUTH_SESSION_TYPE,
     email: normalizedEmail,
     createdAt: Date.now(),
     expiresAt: expiresAtMs,
-  });
+  }, "Replace");
 
   return {
     token: sessionToken,
@@ -138,12 +144,12 @@ export const deleteAuthSessionByToken = async (token: string | null) => {
   }
 
   const tokenHash = hashWithSecret(token);
-  const container = getAppContainer();
+  const tableClient = await getAppTableClient();
 
   try {
-    await container.item(tokenHash, AUTH_SCOPE).delete();
+    await tableClient.deleteEntity(AUTH_SCOPE, tokenHash);
   } catch (error) {
-    if (isCosmosNotFoundError(error)) {
+    if (isTableNotFoundError(error)) {
       return;
     }
 
