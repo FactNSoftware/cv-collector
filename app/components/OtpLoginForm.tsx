@@ -136,7 +136,7 @@ export function OtpLoginForm() {
       <section className="grid h-full grid-cols-1 md:grid-cols-2">
         <div className="relative hidden lg:block">
           <Image
-            src="/hero.png"
+            src="/main.png"
             alt="Abstract warm gradient artwork"
             fill
             priority
