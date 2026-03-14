@@ -146,3 +146,20 @@ export const upsertCandidateProfile = async (
 
   return toProfile(entity);
 };
+
+export const listCandidateProfiles = async (): Promise<CandidateProfile[]> => {
+  const tableClient = await getAppTableClient();
+  const entities = tableClient.listEntities<CandidateProfileEntity>({
+    queryOptions: {
+      filter: `PartitionKey eq '${CANDIDATE_SCOPE}' and type eq '${CANDIDATE_PROFILE_TYPE}'`,
+    },
+  });
+
+  const items: CandidateProfile[] = [];
+
+  for await (const entity of entities) {
+    items.push(toProfile(entity));
+  }
+
+  return items.sort((left, right) => left.email.localeCompare(right.email));
+};

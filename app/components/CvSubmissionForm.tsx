@@ -3,15 +3,8 @@
 import { FileUp } from "lucide-react";
 import { ChangeEvent, FormEvent, useRef, useState } from "react";
 import type { CandidateProfile } from "../../lib/candidate-profile";
+import type { JobRecord } from "../../lib/jobs";
 import { useToast } from "./ToastProvider";
-
-const JOB_OPENINGS = [
-  "Frontend Developer",
-  "Backend Engineer",
-  "UI/UX Designer",
-  "QA Engineer",
-  "Project Manager",
-];
 
 type FormValues = {
   firstName: string;
@@ -26,6 +19,7 @@ type FormValues = {
 type CvSubmissionFormProps = {
   sessionEmail: string;
   initialProfile: CandidateProfile;
+  jobs: JobRecord[];
 };
 
 const INITIAL_VALUES: FormValues = {
@@ -34,7 +28,7 @@ const INITIAL_VALUES: FormValues = {
   email: "",
   phone: "",
   idOrPassportNumber: "",
-  jobOpening: JOB_OPENINGS[0],
+  jobOpening: "",
   resume: null,
 };
 
@@ -48,14 +42,19 @@ const toInitialValues = (
   email: sessionEmail,
   phone: profile.phone,
   idOrPassportNumber: profile.idOrPassportNumber,
+  jobOpening: "",
 });
 
 export function CvSubmissionForm({
   sessionEmail,
   initialProfile,
+  jobs,
 }: CvSubmissionFormProps) {
   const [values, setValues] = useState<FormValues>(
-    toInitialValues(sessionEmail, initialProfile),
+    {
+      ...toInitialValues(sessionEmail, initialProfile),
+      jobOpening: jobs[0]?.title ?? "",
+    },
   );
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -127,6 +126,8 @@ export function CvSubmissionForm({
     }
   };
 
+  const hasJobs = jobs.length > 0;
+
   return (
     <section className="mx-auto max-w-4xl border rounded-lg border-slate-200 bg-white p-8">
       <div className="text-center">
@@ -152,18 +153,25 @@ export function CvSubmissionForm({
             </label>
             <select
               id="jobOpening"
+              required
+              disabled={!hasJobs}
               value={values.jobOpening}
               onChange={(event) =>
                 updateValue("jobOpening", event.target.value)
               }
               className="w-full py-3 px-2 rounded-lg border border-[#d9d2c7] text-sm text-[#171717] outline-none transition focus:border-[#d38133] focus:ring-4 focus:ring-[#f3d8bc]"
             >
-              {JOB_OPENINGS.map((opening) => (
-                <option key={opening} value={opening}>
-                  {opening}
+              {jobs.map((opening) => (
+                <option key={opening.id} value={opening.title}>
+                  {opening.title}
                 </option>
               ))}
             </select>
+            {!hasJobs && (
+              <p className="text-sm text-amber-700">
+                No published jobs are available right now.
+              </p>
+            )}
           </div>
 
           <div className="grid gap-6 sm:grid-cols-2">
@@ -315,7 +323,7 @@ export function CvSubmissionForm({
         <div>
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !hasJobs}
             className="flex h-12 w-full cursor-pointer items-center justify-center rounded-lg bg-[#01371B] text-base font-medium text-[#A3E42F] transition hover:bg-[#262626] focus:outline-none focus:ring-4 focus:ring-[#d9d9d9]"
           >
             {isSubmitting ? "Submitting..." : "Submit Application"}

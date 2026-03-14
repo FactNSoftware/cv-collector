@@ -26,6 +26,7 @@ This is cheaper than the previous App Service + Cosmos DB approach for a small o
 - `AZURE_COMMUNICATION_CONNECTION_STRING`
 - `AZURE_EMAIL_SENDER_ADDRESS`
 - `AUTH_SECRET`
+- `ADMIN_PERMISSION_TOKEN`
 
 `AZURE_BLOB_CONNECTION_STRING` is still supported as a fallback for backward compatibility, but the preferred variable is `AZURE_STORAGE_CONNECTION_STRING`.
 
@@ -211,3 +212,21 @@ Required GitHub secrets:
 - Table Storage is used only for app metadata. Uploaded PDFs stay in Blob Storage.
 - For a very small workload, this is the lowest-cost Azure-first setup that still keeps the app fully managed.
 - If you already have Cosmos DB Free Tier and want to keep it, you can, but it is not the default recommendation for this app anymore.
+
+## Admin Bootstrap
+
+Admin accounts are stored in Azure Table Storage like other app metadata.
+
+To create the first admin account, call:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@example.com",
+    "permissionToken": "your-ADMIN_PERMISSION_TOKEN",
+    "createdBy": "bootstrap"
+  }'
+```
+
+Only requests with the correct `ADMIN_PERMISSION_TOKEN` can create admin accounts.

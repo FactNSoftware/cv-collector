@@ -10,12 +10,14 @@ type CandidatePortalProps = {
   sessionEmail: string;
   profile: CandidateProfile;
   submissions: CvSubmissionRecord[];
+  isAdmin: boolean;
 };
 
 export function CandidatePortal({
   sessionEmail,
   profile,
   submissions,
+  isAdmin,
 }: CandidatePortalProps) {
   return (
     <main className="min-h-screen bg-[#faf9f6] px-4 py-8 sm:px-8">
@@ -37,6 +39,14 @@ export function CandidatePortal({
             >
               Submit CV
             </Link>
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+              >
+                Admin Portal
+              </Link>
+            )}
             <LogoutButton />
           </div>
         </div>

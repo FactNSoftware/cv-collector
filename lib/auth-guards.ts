@@ -5,6 +5,7 @@ import {
   getAuthSessionFromRequest,
   type AuthSession,
 } from "./auth-session";
+import { isAdminEmail } from "./admin-access";
 
 const UNAUTHORIZED_MESSAGE = "Unauthorized.";
 
@@ -32,6 +33,38 @@ export const requirePageSession = async (): Promise<AuthSession> => {
 
   if (!session) {
     redirect("/");
+  }
+
+  return session;
+};
+
+export const requireAdminApiSession = async (request: Request): Promise<ApiAuthResult> => {
+  const auth = await requireApiSession(request);
+
+  if ("response" in auth) {
+    return auth;
+  }
+
+  const isAdmin = await isAdminEmail(auth.session.email);
+
+  if (!isAdmin) {
+    return {
+      response: NextResponse.json(
+        { message: UNAUTHORIZED_MESSAGE },
+        { status: 403 },
+      ),
+    };
+  }
+
+  return auth;
+};
+
+export const requireAdminPageSession = async (): Promise<AuthSession> => {
+  const session = await requirePageSession();
+  const isAdmin = await isAdminEmail(session.email);
+
+  if (!isAdmin) {
+    redirect("/apply");
   }
 
   return session;

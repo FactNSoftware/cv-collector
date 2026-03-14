@@ -7,6 +7,7 @@ import {
   listCvSubmissionsByEmail,
 } from "../../../lib/cv-storage";
 import { upsertCandidateProfile } from "../../../lib/candidate-profile";
+import { listPublishedJobs } from "../../../lib/jobs";
 
 export const runtime = "nodejs";
 
@@ -100,6 +101,18 @@ export async function POST(request: Request) {
     if (!(resume instanceof File)) {
       return NextResponse.json(
         { message: "CV is required. Please upload a CV file." },
+        { status: 400 },
+      );
+    }
+
+    const publishedJobs = await listPublishedJobs();
+    const hasMatchingJob = publishedJobs.some(
+      (job) => job.title === values.jobOpening,
+    );
+
+    if (!hasMatchingJob) {
+      return NextResponse.json(
+        { message: "Please select a valid published job opening." },
         { status: 400 },
       );
     }
