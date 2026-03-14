@@ -25,6 +25,7 @@ env:
   COMMUNICATION_SERVICE_NAME: ${{ secrets.AZURE_COMMUNICATION_SERVICE_NAME }}
   EMAIL_SENDER_ADDRESS: ${{ secrets.AZURE_EMAIL_SENDER_ADDRESS }}
   AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+  ADMIN_PERMISSION_TOKEN: ${{ secrets.ADMIN_PERMISSION_TOKEN }}
   IMAGE_NAME: cv-collector
   NODE_VERSION: 20
 
@@ -87,6 +88,7 @@ jobs:
           COMMUNICATION_SERVICE_NAME: ${{ env.COMMUNICATION_SERVICE_NAME }}
           EMAIL_SENDER_ADDRESS: ${{ secrets.AZURE_EMAIL_SENDER_ADDRESS }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          ADMIN_PERMISSION_TOKEN: ${{ secrets.ADMIN_PERMISSION_TOKEN }}
         with:
           inlineScript: |
             set -euo pipefail
@@ -98,6 +100,11 @@ jobs:
 
             if [ -z "${AUTH_SECRET:-}" ]; then
               echo "AUTH_SECRET GitHub secret is required."
+              exit 1
+            fi
+
+            if [ -z "${ADMIN_PERMISSION_TOKEN:-}" ]; then
+              echo "ADMIN_PERMISSION_TOKEN GitHub secret is required."
               exit 1
             fi
 
@@ -142,6 +149,7 @@ jobs:
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           EMAIL_SENDER_ADDRESS: ${{ secrets.AZURE_EMAIL_SENDER_ADDRESS }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          ADMIN_PERMISSION_TOKEN: ${{ secrets.ADMIN_PERMISSION_TOKEN }}
         with:
           inlineScript: |
             set -euo pipefail
@@ -157,6 +165,7 @@ jobs:
                 --resource-group "$RESOURCE_GROUP" \
                 --secrets \
                   auth-secret="$AUTH_SECRET" \
+                  admin-permission-token="$ADMIN_PERMISSION_TOKEN" \
                   storage-connection="${{ steps.resolve-runtime-values.outputs.storage_connection_string }}" \
                   communication-connection="${{ steps.resolve-runtime-values.outputs.communication_connection_string }}"
 
@@ -171,7 +180,8 @@ jobs:
                   AZURE_TABLES_TABLE_NAME=cvcollector \
                   AZURE_COMMUNICATION_CONNECTION_STRING=secretref:communication-connection \
                   AZURE_EMAIL_SENDER_ADDRESS="$EMAIL_SENDER_ADDRESS" \
-                  AUTH_SECRET=secretref:auth-secret
+                  AUTH_SECRET=secretref:auth-secret \
+                  ADMIN_PERMISSION_TOKEN=secretref:admin-permission-token
             else
               az containerapp create \
                 --name "$CONTAINER_APP_NAME" \
@@ -189,6 +199,7 @@ jobs:
                 --registry-password "${{ steps.resolve-runtime-values.outputs.acr_password }}" \
                 --secrets \
                   auth-secret="$AUTH_SECRET" \
+                  admin-permission-token="$ADMIN_PERMISSION_TOKEN" \
                   storage-connection="${{ steps.resolve-runtime-values.outputs.storage_connection_string }}" \
                   communication-connection="${{ steps.resolve-runtime-values.outputs.communication_connection_string }}" \
                 --env-vars \
@@ -198,5 +209,6 @@ jobs:
                   AZURE_TABLES_TABLE_NAME=cvcollector \
                   AZURE_COMMUNICATION_CONNECTION_STRING=secretref:communication-connection \
                   AZURE_EMAIL_SENDER_ADDRESS="$EMAIL_SENDER_ADDRESS" \
-                  AUTH_SECRET=secretref:auth-secret
+                  AUTH_SECRET=secretref:auth-secret \
+                  ADMIN_PERMISSION_TOKEN=secretref:admin-permission-token
             fi
