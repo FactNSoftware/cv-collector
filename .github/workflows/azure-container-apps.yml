@@ -1,6 +1,8 @@
-name: Azure Container Apps
+name: CI and Azure Container Apps
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
@@ -9,19 +11,51 @@ permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: azure-container-apps-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY_NAME: ${{ secrets.AZURE_CONTAINER_REGISTRY_NAME }}
   REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_CONTAINER_REGISTRY_LOGIN_SERVER }}
   RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
   CONTAINER_APP_NAME: ${{ secrets.AZURE_CONTAINER_APP_NAME }}
   IMAGE_NAME: cv-collector
+  NODE_VERSION: 20
 
 jobs:
-  deploy:
+  quality:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
       - uses: azure/login@v2
         with:
@@ -42,6 +76,11 @@ jobs:
         uses: azure/CLI@v2
         with:
           inlineScript: |
+            az containerapp show \
+              --name "$CONTAINER_APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --output none
+
             az containerapp update \
               --name "$CONTAINER_APP_NAME" \
               --resource-group "$RESOURCE_GROUP" \
