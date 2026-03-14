@@ -13,6 +13,14 @@ const CV_SCOPE = "cv";
 const CV_SUBMISSION_TYPE = "submission";
 const CV_UNIQUE_TYPE = "unique";
 
+export const CV_REVIEW_STATUSES = [
+  "pending",
+  "accepted",
+  "rejected",
+] as const;
+
+export type CvReviewStatus = (typeof CV_REVIEW_STATUSES)[number];
+
 export type CvSubmissionRecord = {
   id: string;
   firstName: string;
@@ -20,10 +28,16 @@ export type CvSubmissionRecord = {
   email: string;
   phone: string;
   idOrPassportNumber: string;
+  jobId: string;
+  jobCode: string;
+  jobTitle: string;
   jobOpening: string;
   resumeOriginalName: string;
   resumeStoredName: string;
   resumeMimeType: string;
+  reviewStatus: CvReviewStatus;
+  reviewedAt: string | null;
+  reviewedBy: string;
   submittedAt: string;
 };
 
@@ -33,10 +47,19 @@ type CreateCvSubmissionInput = {
   email: string;
   phone: string;
   idOrPassportNumber: string;
+  jobId: string;
+  jobCode: string;
+  jobTitle: string;
   jobOpening: string;
   resumeOriginalName: string;
   resumeMimeType: string;
   resumeBuffer: Buffer;
+};
+
+type UpdateCvSubmissionReviewInput = {
+  id: string;
+  reviewStatus: CvReviewStatus;
+  reviewedBy: string;
 };
 
 export class DuplicateApplicantError extends Error {
@@ -55,11 +78,21 @@ type CvSubmissionDocument = {
   email: string;
   phone: string;
   idOrPassportNumber: string;
+  jobId?: string;
+  jobCode?: string;
+  jobTitle?: string;
   jobOpening: string;
   resumeOriginalName: string;
   resumeStoredName: string;
   resumeMimeType: string;
+  reviewStatus?: string;
+  reviewedAt?: number;
+  reviewedBy?: string;
   submittedAt: number;
+};
+
+const normalizeReviewStatus = (value: string | undefined): CvReviewStatus => {
+  return CV_REVIEW_STATUSES.find((item) => item === value) ?? "pending";
 };
 
 const toRecord = (submission: CvSubmissionDocument): CvSubmissionRecord => {
@@ -70,10 +103,18 @@ const toRecord = (submission: CvSubmissionDocument): CvSubmissionRecord => {
     email: submission.email,
     phone: submission.phone,
     idOrPassportNumber: submission.idOrPassportNumber,
+    jobId: submission.jobId ?? "",
+    jobCode: submission.jobCode ?? "",
+    jobTitle: submission.jobTitle ?? submission.jobOpening,
     jobOpening: submission.jobOpening,
     resumeOriginalName: submission.resumeOriginalName,
     resumeStoredName: submission.resumeStoredName,
     resumeMimeType: submission.resumeMimeType,
+    reviewStatus: normalizeReviewStatus(submission.reviewStatus),
+    reviewedAt: submission.reviewedAt
+      ? new Date(submission.reviewedAt).toISOString()
+      : null,
+    reviewedBy: submission.reviewedBy ?? "",
     submittedAt: new Date(submission.submittedAt).toISOString(),
   };
 };
@@ -96,10 +137,16 @@ const toSubmissionDoc = (
     email: String(data.email ?? ""),
     phone: String(data.phone ?? ""),
     idOrPassportNumber: String(data.idOrPassportNumber ?? ""),
+    jobId: String(data.jobId ?? ""),
+    jobCode: String(data.jobCode ?? ""),
+    jobTitle: String(data.jobTitle ?? data.jobOpening ?? ""),
     jobOpening: String(data.jobOpening ?? ""),
     resumeOriginalName: String(data.resumeOriginalName ?? ""),
     resumeStoredName: String(data.resumeStoredName ?? ""),
     resumeMimeType: String(data.resumeMimeType ?? "application/pdf"),
+    reviewStatus: String(data.reviewStatus ?? "pending"),
+    reviewedAt: Number(data.reviewedAt ?? 0),
+    reviewedBy: String(data.reviewedBy ?? ""),
     submittedAt,
   };
 };
@@ -141,6 +188,19 @@ export const listCvSubmissionsByEmail = async (
 
   const submissions = await listCvSubmissions();
   return submissions.filter((submission) => submission.email === normalizedEmail);
+};
+
+export const listCvSubmissionsByJobId = async (
+  jobId: string,
+): Promise<CvSubmissionRecord[]> => {
+  const normalizedJobId = jobId.trim();
+
+  if (!normalizedJobId) {
+    return [];
+  }
+
+  const submissions = await listCvSubmissions();
+  return submissions.filter((submission) => submission.jobId === normalizedJobId);
 };
 
 export const getCvSubmissionById = async (
@@ -218,10 +278,16 @@ export const createCvSubmission = async (
         email: normalizedEmail,
         phone: input.phone,
         idOrPassportNumber: normalizedIdValue,
+        jobId: input.jobId,
+        jobCode: input.jobCode,
+        jobTitle: input.jobTitle,
         jobOpening: input.jobOpening,
         resumeOriginalName: input.resumeOriginalName,
         resumeStoredName: savedFile.storedFileName,
         resumeMimeType: savedFile.mimeType,
+        reviewStatus: "pending",
+        reviewedAt: 0,
+        reviewedBy: "",
         submittedAt,
       }],
     ]);
@@ -235,10 +301,16 @@ export const createCvSubmission = async (
       email: normalizedEmail,
       phone: input.phone,
       idOrPassportNumber: normalizedIdValue,
+      jobId: input.jobId,
+      jobCode: input.jobCode,
+      jobTitle: input.jobTitle,
       jobOpening: input.jobOpening,
       resumeOriginalName: input.resumeOriginalName,
       resumeStoredName: savedFile.storedFileName,
       resumeMimeType: savedFile.mimeType,
+      reviewStatus: "pending",
+      reviewedAt: 0,
+      reviewedBy: "",
       submittedAt,
     });
   } catch (error) {
@@ -256,4 +328,75 @@ export const createCvSubmission = async (
 
     throw error;
   }
+};
+
+export const updateCvSubmissionReview = async (
+  input: UpdateCvSubmissionReviewInput,
+): Promise<CvSubmissionRecord | null> => {
+  const existing = await getCvSubmissionById(input.id);
+
+  if (!existing) {
+    return null;
+  }
+
+  const tableClient = await getAppTableClient();
+  const reviewedAt = Date.now();
+
+  await tableClient.upsertEntity({
+    partitionKey: CV_SCOPE,
+    rowKey: toSubmissionRowKey(input.id),
+    type: CV_SUBMISSION_TYPE,
+    firstName: existing.firstName,
+    lastName: existing.lastName,
+    email: existing.email,
+    phone: existing.phone,
+    idOrPassportNumber: existing.idOrPassportNumber,
+    jobId: existing.jobId,
+    jobCode: existing.jobCode,
+    jobTitle: existing.jobTitle,
+    jobOpening: existing.jobOpening,
+    resumeOriginalName: existing.resumeOriginalName,
+    resumeStoredName: existing.resumeStoredName,
+    resumeMimeType: existing.resumeMimeType,
+    reviewStatus: input.reviewStatus,
+    reviewedAt,
+    reviewedBy: input.reviewedBy.trim().toLowerCase(),
+    submittedAt: Date.parse(existing.submittedAt),
+  }, "Replace");
+
+  return getCvSubmissionById(input.id);
+};
+
+export const deleteCvSubmission = async (id: string): Promise<boolean> => {
+  const existing = await getCvSubmissionById(id);
+
+  if (!existing) {
+    return false;
+  }
+
+  const tableClient = await getAppTableClient();
+
+  await tableClient.deleteEntity(CV_SCOPE, toSubmissionRowKey(id));
+
+  try {
+    await tableClient.deleteEntity(CV_SCOPE, toUniqueDocId("email", existing.email));
+  } catch (error) {
+    if (!isTableNotFoundError(error)) {
+      throw error;
+    }
+  }
+
+  try {
+    await tableClient.deleteEntity(
+      CV_SCOPE,
+      toUniqueDocId("id", existing.idOrPassportNumber),
+    );
+  } catch (error) {
+    if (!isTableNotFoundError(error)) {
+      throw error;
+    }
+  }
+
+  await deleteCvUpload(existing.resumeStoredName);
+  return true;
 };

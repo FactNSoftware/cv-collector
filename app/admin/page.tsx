@@ -1,19 +1,19 @@
 import { AdminPortal } from "../components/AdminPortal";
 import { requireAdminPageSession } from "../../lib/auth-guards";
-import { listJobs } from "../../lib/jobs";
 import { listAdminAccounts } from "../../lib/admin-access";
 import { listCandidateProfiles } from "../../lib/candidate-profile";
+import { listJobs } from "../../lib/jobs";
 import { listCvSubmissions } from "../../lib/cv-storage";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
   const session = await requireAdminPageSession();
-  const [jobs, admins, profiles, submissions] = await Promise.all([
-    listJobs(),
+  const [admins, profiles, submissions, jobs] = await Promise.all([
     listAdminAccounts(),
     listCandidateProfiles(),
     listCvSubmissions(),
+    listJobs(),
   ]);
 
   const users = profiles.map((profile) => ({
@@ -22,19 +22,22 @@ export default async function AdminPage() {
       .filter((submission) => submission.email === profile.email)
       .map((submission) => ({
         id: submission.id,
+        jobId: submission.jobId,
+        jobCode: submission.jobCode,
+        jobTitle: submission.jobTitle,
         jobOpening: submission.jobOpening,
         submittedAt: submission.submittedAt,
         resumeOriginalName: submission.resumeOriginalName,
-        resumeDownloadUrl: `/api/cv/${submission.id}/resume`,
+        resumeDownloadUrl: `/api/admin/cv/${submission.id}/resume`,
       })),
   }));
 
   return (
     <AdminPortal
       sessionEmail={session.email}
-      initialJobs={jobs}
       initialAdmins={admins}
       initialUsers={users}
+      jobCount={jobs.length}
     />
   );
 }

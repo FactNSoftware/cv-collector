@@ -6,7 +6,19 @@ export const runtime = "nodejs";
 
 type JobPayload = {
   title?: string;
-  description?: string;
+  summary?: string;
+  descriptionHtml?: string;
+  department?: string;
+  location?: string;
+  employmentType?: string;
+  workplaceType?: string;
+  experienceLevel?: string;
+  salaryCurrency?: string;
+  salaryRange?: string;
+  vacancies?: number | null;
+  closingDate?: string;
+  requirements?: string;
+  benefits?: string;
   isPublished?: boolean;
 };
 
@@ -37,7 +49,19 @@ export async function POST(request: Request) {
 
     const job = await upsertJob({
       title: body.title,
-      description: body.description ?? "",
+      summary: body.summary ?? "",
+      descriptionHtml: body.descriptionHtml ?? "",
+      department: body.department ?? "",
+      location: body.location ?? "",
+      employmentType: body.employmentType ?? "",
+      workplaceType: body.workplaceType ?? "",
+      experienceLevel: body.experienceLevel ?? "",
+      salaryCurrency: body.salaryCurrency ?? "LKR",
+      salaryRange: body.salaryRange ?? "",
+      vacancies: typeof body.vacancies === "number" ? body.vacancies : null,
+      closingDate: body.closingDate ?? "",
+      requirements: body.requirements ?? "",
+      benefits: body.benefits ?? "",
       isPublished: Boolean(body.isPublished),
     });
 

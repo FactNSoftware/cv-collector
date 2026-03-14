@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { FormEvent, KeyboardEvent, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ClipboardEvent, FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { LoadingOverlay } from "./LoadingOverlay";
 import { useToast } from "./ToastProvider";
 
 const OTP_LENGTH = 6;
@@ -13,11 +14,13 @@ const getDefaultOtp = () => {
 
 export function OtpLoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState<"email" | "otp">("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState(getDefaultOtp());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showToast } = useToast();
+  const lastSubmittedOtp = useRef("");
 
   const requestOtp = async () => {
     setIsSubmitting(true);
@@ -58,6 +61,7 @@ export function OtpLoginForm() {
     if (sent) {
       setStep("otp");
       setOtp(getDefaultOtp());
+      lastSubmittedOtp.current = "";
     }
   };
 
@@ -87,8 +91,43 @@ export function OtpLoginForm() {
     }
   };
 
+  const handleOtpPaste = (
+    event: ClipboardEvent<HTMLInputElement>,
+    index: number,
+  ) => {
+    const pasted = event.clipboardData.getData("text").replace(/\D/g, "");
+
+    if (!pasted) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const nextOtp = [...otp];
+    const pastedDigits = pasted.slice(0, OTP_LENGTH - index).split("");
+
+    pastedDigits.forEach((digit, offset) => {
+      nextOtp[index + offset] = digit;
+    });
+
+    setOtp(nextOtp);
+
+    const focusIndex = Math.min(index + pastedDigits.length, OTP_LENGTH - 1);
+    const nextInput = document.querySelector<HTMLInputElement>(
+      `input[data-otp-index="${focusIndex}"]`,
+    );
+    nextInput?.focus();
+  };
+
   const handleOtpSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    await verifyOtp();
+  };
+
+  const verifyOtp = useCallback(async () => {
+    if (isSubmitting) {
+      return;
+    }
 
     const otpCode = otp.join("");
 
@@ -97,15 +136,17 @@ export function OtpLoginForm() {
       return;
     }
 
+    lastSubmittedOtp.current = otpCode;
     setIsSubmitting(true);
 
     try {
+      const nextPath = searchParams.get("next");
       const response = await fetch("/api/auth/otp/verify", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email: email.trim(), otp: otpCode }),
+        body: JSON.stringify({ email: email.trim(), otp: otpCode, next: nextPath }),
       });
 
       const payload = await response
@@ -118,17 +159,46 @@ export function OtpLoginForm() {
       }
 
       showToast("Logged in successfully.");
-      router.push("/apply");
+      router.push(nextPath || payload.redirectPath || "/applications");
       router.refresh();
     } catch {
       showToast("Something went wrong while verifying OTP.", "error");
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [email, isSubmitting, otp, router, searchParams, showToast]);
+
+  useEffect(() => {
+    if (step !== "otp") {
+      return;
+    }
+
+    const otpCode = otp.join("");
+
+    if (otpCode.length !== OTP_LENGTH) {
+      if (lastSubmittedOtp.current === otpCode) {
+        lastSubmittedOtp.current = "";
+      }
+      return;
+    }
+
+    if (isSubmitting || lastSubmittedOtp.current === otpCode) {
+      return;
+    }
+
+    void verifyOtp();
+  }, [isSubmitting, otp, step, verifyOtp]);
 
   return (
     <main className="h-screen">
+      {isSubmitting && (
+        <LoadingOverlay
+          title={step === "email" ? "Sending OTP" : "Verifying OTP"}
+          message={step === "email"
+            ? "Contacting the authentication service and sending your one-time code."
+            : "Checking your one-time code and signing you in."}
+        />
+      )}
       <section className="grid h-full grid-cols-1 md:grid-cols-2">
         <div className="relative hidden lg:block">
           <Image
@@ -186,7 +256,7 @@ export function OtpLoginForm() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex h-12 w-full cursor-pointer items-center justify-center rounded-2xl bg-[#01371B] text-base font-medium text-[#A3E42F] transition hover:bg-[#262626] focus:outline-none focus:ring-4 focus:ring-[#d9d9d9] disabled:cursor-not-allowed disabled:opacity-70"
+                  className="theme-btn-primary flex h-12 w-full cursor-pointer items-center justify-center rounded-2xl text-base font-medium disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {isSubmitting ? "Sending..." : "Get OTP"}
                 </button>
@@ -207,6 +277,7 @@ export function OtpLoginForm() {
                         handleOtpChange(index, event.target.value)
                       }
                       onKeyDown={(event) => handleOtpKeyDown(event, index)}
+                      onPaste={(event) => handleOtpPaste(event, index)}
                       className="h-14 w-12 rounded-2xl border border-[#e7dfd4] bg-[#fcfaf7] text-center text-xl font-semibold text-[#171717] outline-none transition focus:border-[#d38133] focus:ring-4 focus:ring-[#f3d8bc] sm:h-16 sm:w-14"
                     />
                   ))}
@@ -215,7 +286,7 @@ export function OtpLoginForm() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex h-12 w-full cursor-pointer items-center justify-center rounded-2xl bg-[#01371B] text-base font-medium text-[#A3E42F] transition hover:bg-[#262626] focus:outline-none focus:ring-4 focus:ring-[#d9d9d9] disabled:cursor-not-allowed disabled:opacity-70"
+                  className="theme-btn-primary flex h-12 w-full cursor-pointer items-center justify-center rounded-2xl text-base font-medium disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {isSubmitting ? "Verifying..." : "Verify OTP"}
                 </button>
@@ -223,7 +294,10 @@ export function OtpLoginForm() {
                 <div className="flex items-center justify-between gap-3">
                   <button
                     type="button"
-                    onClick={() => setStep("email")}
+                    onClick={() => {
+                      setStep("email");
+                      lastSubmittedOtp.current = "";
+                    }}
                     className="cursor-pointer text-sm font-medium text-[#7a7a7a] transition hover:text-[#171717]"
                   >
                     Use a different email

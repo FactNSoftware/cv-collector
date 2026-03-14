@@ -4,6 +4,7 @@ import {
   getCandidateProfileByEmail,
   upsertCandidateProfile,
 } from "../../../lib/candidate-profile";
+import { candidateProfileSchema } from "../../../lib/candidate-profile-validation";
 
 export const runtime = "nodejs";
 
@@ -45,13 +46,28 @@ export async function PATCH(request: Request) {
     }
 
     const body = (await request.json()) as CandidateProfilePayload;
+    const parsed = candidateProfileSchema.safeParse({
+      firstName: body.firstName ?? "",
+      lastName: body.lastName ?? "",
+      phone: body.phone ?? "",
+      idOrPassportNumber: body.idOrPassportNumber ?? "",
+    });
+
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+
+      return NextResponse.json(
+        {
+          message: issue?.message || "Profile details are invalid.",
+          fieldErrors: parsed.error.flatten().fieldErrors,
+        },
+        { status: 400 },
+      );
+    }
 
     const profile = await upsertCandidateProfile({
       email: auth.session.email,
-      firstName: body.firstName,
-      lastName: body.lastName,
-      phone: body.phone,
-      idOrPassportNumber: body.idOrPassportNumber,
+      ...parsed.data,
     });
 
     return NextResponse.json({

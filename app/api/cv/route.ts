@@ -7,7 +7,8 @@ import {
   listCvSubmissionsByEmail,
 } from "../../../lib/cv-storage";
 import { upsertCandidateProfile } from "../../../lib/candidate-profile";
-import { listPublishedJobs } from "../../../lib/jobs";
+import { candidateProfileSchema } from "../../../lib/candidate-profile-validation";
+import { getJobDisplayLabel, listPublishedJobs } from "../../../lib/jobs";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,7 @@ const REQUIRED_FIELDS = [
   "email",
   "phone",
   "idOrPassportNumber",
-  "jobOpening",
+  "jobId",
 ] as const;
 
 const getStringValue = (formData: FormData, key: string) => {
@@ -46,6 +47,8 @@ export async function GET(request: Request) {
         jobOpening: submission.jobOpening,
         resumeOriginalName: submission.resumeOriginalName,
         resumeDownloadUrl: `/api/cv/${submission.id}/resume`,
+        reviewStatus: submission.reviewStatus,
+        reviewedAt: submission.reviewedAt,
         submittedAt: submission.submittedAt,
       })),
     });
@@ -74,7 +77,7 @@ export async function POST(request: Request) {
       email: getStringValue(formData, "email"),
       phone: getStringValue(formData, "phone"),
       idOrPassportNumber: getStringValue(formData, "idOrPassportNumber"),
-      jobOpening: getStringValue(formData, "jobOpening"),
+      jobId: getStringValue(formData, "jobId"),
     };
 
     const missingFields = REQUIRED_FIELDS.filter((field) => !values[field]);
@@ -96,6 +99,25 @@ export async function POST(request: Request) {
       );
     }
 
+    const parsedProfile = candidateProfileSchema.safeParse({
+      firstName: values.firstName,
+      lastName: values.lastName,
+      phone: values.phone,
+      idOrPassportNumber: values.idOrPassportNumber,
+    });
+
+    if (!parsedProfile.success) {
+      const issue = parsedProfile.error.issues[0];
+
+      return NextResponse.json(
+        {
+          message: issue?.message || "Profile details are invalid.",
+          fieldErrors: parsedProfile.error.flatten().fieldErrors,
+        },
+        { status: 400 },
+      );
+    }
+
     const resume = formData.get("resume");
 
     if (!(resume instanceof File)) {
@@ -106,11 +128,9 @@ export async function POST(request: Request) {
     }
 
     const publishedJobs = await listPublishedJobs();
-    const hasMatchingJob = publishedJobs.some(
-      (job) => job.title === values.jobOpening,
-    );
+    const matchingJob = publishedJobs.find((job) => job.id === values.jobId);
 
-    if (!hasMatchingJob) {
+    if (!matchingJob) {
       return NextResponse.json(
         { message: "Please select a valid published job opening." },
         { status: 400 },
@@ -119,14 +139,15 @@ export async function POST(request: Request) {
 
     await upsertCandidateProfile({
       email: auth.session.email,
-      firstName: values.firstName,
-      lastName: values.lastName,
-      phone: values.phone,
-      idOrPassportNumber: values.idOrPassportNumber,
+      ...parsedProfile.data,
     });
 
     const created = await createCvSubmission({
       ...values,
+      ...parsedProfile.data,
+      jobCode: matchingJob.code,
+      jobTitle: matchingJob.title,
+      jobOpening: getJobDisplayLabel(matchingJob),
       resumeOriginalName: resume.name || "resume.pdf",
       resumeMimeType: resume.type,
       resumeBuffer: Buffer.from(await resume.arrayBuffer()),
@@ -145,6 +166,8 @@ export async function POST(request: Request) {
           jobOpening: created.jobOpening,
           resumeOriginalName: created.resumeOriginalName,
           resumeDownloadUrl: `/api/cv/${created.id}/resume`,
+          reviewStatus: created.reviewStatus,
+          reviewedAt: created.reviewedAt,
           submittedAt: created.submittedAt,
         },
       },

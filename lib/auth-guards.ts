@@ -70,10 +70,48 @@ export const requireAdminPageSession = async (): Promise<AuthSession> => {
   return session;
 };
 
-export const redirectIfAuthenticated = async (path: string) => {
+export const requireCandidatePageSession = async (): Promise<AuthSession> => {
+  const session = await requirePageSession();
+  const isAdmin = await isAdminEmail(session.email);
+
+  if (isAdmin) {
+    redirect("/admin");
+  }
+
+  return session;
+};
+
+export const getDefaultPortalPath = async (email: string) => {
+  return await isAdminEmail(email) ? "/admin" : "/applications";
+};
+
+const isSafeInternalPath = (path: string) => {
+  return path.startsWith("/") && !path.startsWith("//");
+};
+
+export const getPostAuthRedirectPath = async (
+  email: string,
+  requestedPath?: string | null,
+) => {
+  const defaultPath = await getDefaultPortalPath(email);
+
+  if (!requestedPath || !isSafeInternalPath(requestedPath)) {
+    return defaultPath;
+  }
+
+  const isAdmin = await isAdminEmail(email);
+
+  if (isAdmin) {
+    return requestedPath.startsWith("/admin") ? requestedPath : defaultPath;
+  }
+
+  return requestedPath.startsWith("/admin") ? defaultPath : requestedPath;
+};
+
+export const redirectIfAuthenticated = async (requestedPath?: string | null) => {
   const session = await getAuthSessionFromCookies();
 
   if (session) {
-    redirect(path);
+    redirect(await getPostAuthRedirectPath(session.email, requestedPath));
   }
 };

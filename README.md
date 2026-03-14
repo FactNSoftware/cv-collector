@@ -230,3 +230,6 @@ curl -X POST http://localhost:3000/api/admin/register \
 ```
 
 Only requests with the correct `ADMIN_PERMISSION_TOKEN` can create admin accounts.
+
+After the first admin signs in, authenticated admins can add other admins from the
+admin portal without providing the bootstrap token again.

@@ -1,4 +1,4 @@
-import { getAppTableClient } from "./azure-tables";
+import { getAppTableClient, isTableNotFoundError } from "./azure-tables";
 
 const ADMIN_SCOPE = "admin";
 const ADMIN_ACCOUNT_TYPE = "account";
@@ -19,7 +19,9 @@ export type AdminAccount = {
   createdBy: string;
 };
 
-const toRowKey = (email: string) => encodeURIComponent(email.trim().toLowerCase());
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+const toRowKey = (email: string) => encodeURIComponent(normalizeEmail(email));
 
 const toAdminAccount = (entity: AdminAccountEntity): AdminAccount => ({
   email: entity.email,
@@ -43,11 +45,13 @@ export const isAdminPermissionTokenValid = (providedToken: string) => {
   return Boolean(providedToken) && providedToken === getAdminPermissionToken();
 };
 
-export const isAdminEmail = async (email: string) => {
-  const normalizedEmail = email.trim().toLowerCase();
+export const getAdminAccountByEmail = async (
+  email: string,
+): Promise<AdminAccount | null> => {
+  const normalizedEmail = normalizeEmail(email);
 
   if (!normalizedEmail) {
-    return false;
+    return null;
   }
 
   const tableClient = await getAppTableClient();
@@ -57,17 +61,36 @@ export const isAdminEmail = async (email: string) => {
       ADMIN_SCOPE,
       toRowKey(normalizedEmail),
     );
-    return entity.type === ADMIN_ACCOUNT_TYPE;
-  } catch {
+
+    if (entity.type !== ADMIN_ACCOUNT_TYPE) {
+      return null;
+    }
+
+    return toAdminAccount(entity);
+  } catch (error) {
+    if (isTableNotFoundError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
+};
+
+export const isAdminEmail = async (email: string) => {
+  const normalizedEmail = normalizeEmail(email);
+
+  if (!normalizedEmail) {
     return false;
   }
+
+  return Boolean(await getAdminAccountByEmail(normalizedEmail));
 };
 
 export const createAdminAccount = async (
   email: string,
   createdBy: string,
 ): Promise<AdminAccount> => {
-  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedEmail = normalizeEmail(email);
 
   if (!normalizedEmail) {
     throw new Error("Email is required to create an admin account.");
@@ -86,6 +109,67 @@ export const createAdminAccount = async (
 
   await tableClient.upsertEntity(entity, "Replace");
   return toAdminAccount(entity);
+};
+
+export const updateAdminAccountEmail = async (
+  currentEmail: string,
+  nextEmail: string,
+  updatedBy: string,
+): Promise<AdminAccount> => {
+  const currentNormalizedEmail = normalizeEmail(currentEmail);
+  const nextNormalizedEmail = normalizeEmail(nextEmail);
+
+  if (!currentNormalizedEmail || !nextNormalizedEmail) {
+    throw new Error("Current and next admin emails are required.");
+  }
+
+  const existing = await getAdminAccountByEmail(currentNormalizedEmail);
+
+  if (!existing) {
+    throw new Error("Admin account not found.");
+  }
+
+  if (currentNormalizedEmail === nextNormalizedEmail) {
+    return existing;
+  }
+
+  const targetExisting = await getAdminAccountByEmail(nextNormalizedEmail);
+
+  if (targetExisting) {
+    throw new Error("An admin account already exists for that email.");
+  }
+
+  const tableClient = await getAppTableClient();
+  const entity: AdminAccountEntity = {
+    partitionKey: ADMIN_SCOPE,
+    rowKey: toRowKey(nextNormalizedEmail),
+    type: ADMIN_ACCOUNT_TYPE,
+    email: nextNormalizedEmail,
+    createdAt: Date.parse(existing.createdAt) || Date.now(),
+    createdBy: updatedBy.trim().toLowerCase(),
+  };
+
+  await tableClient.upsertEntity(entity, "Replace");
+  await tableClient.deleteEntity(ADMIN_SCOPE, toRowKey(currentNormalizedEmail));
+
+  return toAdminAccount(entity);
+};
+
+export const deleteAdminAccount = async (email: string) => {
+  const normalizedEmail = normalizeEmail(email);
+
+  if (!normalizedEmail) {
+    throw new Error("Email is required to delete an admin account.");
+  }
+
+  const existing = await getAdminAccountByEmail(normalizedEmail);
+
+  if (!existing) {
+    throw new Error("Admin account not found.");
+  }
+
+  const tableClient = await getAppTableClient();
+  await tableClient.deleteEntity(ADMIN_SCOPE, toRowKey(normalizedEmail));
 };
 
 export const listAdminAccounts = async (): Promise<AdminAccount[]> => {

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { NavigationLoadingProvider } from "./components/NavigationLoadingProvider";
 import { ToastProvider } from "./components/ToastProvider";
 
 export const metadata: Metadata = {
   title: "CV Collector",
-  description: "Dummy OTP login and CV upload portal for candidate intake.",
+  description: "OTP login and CV upload portal for candidate intake.",
 };
 
 export default function RootLayout({
@@ -15,7 +16,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <NavigationLoadingProvider>{children}</NavigationLoadingProvider>
+        </ToastProvider>
       </body>
     </html>
   );

@@ -1,0 +1,258 @@
+"use client";
+
+import Link from "next/link";
+import { BriefcaseBusiness, Mail, Phone, ShieldCheck } from "lucide-react";
+import { useState } from "react";
+import type { CandidateProfile } from "../../lib/candidate-profile";
+import type { CvSubmissionRecord } from "../../lib/cv-storage";
+import { CandidateCvPreviewModal } from "./CandidateCvPreviewModal";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { PortalShell } from "./PortalShell";
+import { useToast } from "./ToastProvider";
+
+type AdminCandidateDetailProps = {
+  sessionEmail: string;
+  candidate: CandidateProfile;
+  submissions: CvSubmissionRecord[];
+  isAdmin: boolean;
+};
+
+export function AdminCandidateDetail({
+  sessionEmail,
+  candidate,
+  submissions,
+  isAdmin,
+}: AdminCandidateDetailProps) {
+  const [items, setItems] = useState(submissions);
+  const [activePreview, setActivePreview] = useState<CvSubmissionRecord | null>(null);
+  const [confirmAction, setConfirmAction] = useState<null | {
+    title: string;
+    message: string;
+    confirmLabel: string;
+    tone?: "danger" | "warning" | "neutral";
+    onConfirm: () => Promise<void>;
+  }>(null);
+  const { showToast } = useToast();
+  const fullName = [candidate.firstName, candidate.lastName].filter(Boolean).join(" ") || "Unnamed Candidate";
+
+  const updateReviewStatus = async (
+    id: string,
+    reviewStatus: "accepted" | "rejected" | "pending",
+  ) => {
+    const response = await fetch(`/api/admin/applications/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reviewStatus }),
+    });
+    const payload = await response
+      .json()
+      .catch(() => ({ message: "Failed to update application." }));
+
+    if (!response.ok) {
+      showToast(payload.message || "Failed to update application.", "error");
+      return;
+    }
+
+    setItems((current) => current.map((item) => (item.id === id ? payload.item : item)));
+    showToast(payload.message || "Application updated successfully.");
+  };
+
+  const deleteApplication = async (id: string) => {
+    const response = await fetch(`/api/admin/applications/${id}`, {
+      method: "DELETE",
+    });
+    const payload = await response
+      .json()
+      .catch(() => ({ message: "Failed to delete application." }));
+
+    if (!response.ok) {
+      showToast(payload.message || "Failed to delete application.", "error");
+      return;
+    }
+
+    setItems((current) => current.filter((item) => item.id !== id));
+    showToast(payload.message || "Application deleted successfully.");
+  };
+
+  return (
+    <PortalShell
+      portal="admin"
+      sessionEmail={sessionEmail}
+      eyebrow="Candidate Detail"
+      title={fullName}
+      subtitle="Full profile information, account context, and submission history."
+      primaryActionHref="/admin/candidates"
+      primaryActionLabel="Back to Candidates"
+    >
+      <div className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
+          <section className="rounded-[28px] border border-[#eadfcb] bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-semibold text-slate-900">Profile</h2>
+            <div className="mt-5 grid gap-4">
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Full name</p>
+                <p className="mt-2 text-lg font-semibold text-slate-900">{fullName}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Email</p>
+                <p className="mt-2 inline-flex items-center gap-2 text-slate-900"><Mail className="h-4 w-4" />{candidate.email}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Phone</p>
+                <p className="mt-2 inline-flex items-center gap-2 text-slate-900"><Phone className="h-4 w-4" />{candidate.phone || "Not provided"}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">ID / Passport</p>
+                <p className="mt-2 inline-flex items-center gap-2 text-slate-900"><ShieldCheck className="h-4 w-4" />{candidate.idOrPassportNumber || "Not provided"}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Profile updated</p>
+                <p className="mt-2 text-slate-900">{candidate.updatedAt ? new Date(candidate.updatedAt).toLocaleString() : "No profile updates yet"}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Admin access</p>
+                <p className="mt-2 text-slate-900">{isAdmin ? "Candidate also has admin access" : "Candidate account only"}</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-[28px] border border-[#eadfcb] bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Application History</h2>
+                <p className="text-sm text-slate-600">All submitted CVs and jobs for this candidate.</p>
+              </div>
+              <div className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                {items.length} submission{items.length === 1 ? "" : "s"}
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {items.map((submission) => (
+                <article key={submission.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {submission.jobCode && (
+                          <span className="theme-badge-brand rounded-full px-2.5 py-1 text-xs font-semibold">
+                            {submission.jobCode}
+                          </span>
+                        )}
+                        <span className="text-base font-semibold text-slate-900">{submission.jobTitle || submission.jobOpening}</span>
+                      </div>
+                      <p className="mt-2 text-sm text-slate-600">
+                        Applied on {new Date(submission.submittedAt).toLocaleString()}
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          submission.reviewStatus === "accepted"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : submission.reviewStatus === "rejected"
+                              ? "bg-rose-100 text-rose-800"
+                              : "bg-amber-100 text-amber-800"
+                        }`}>
+                          {submission.reviewStatus.charAt(0).toUpperCase() + submission.reviewStatus.slice(1)}
+                        </span>
+                        {submission.reviewedAt && (
+                          <span className="text-xs text-slate-500">
+                            Reviewed on {new Date(submission.reviewedAt).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmAction({
+                          title: "Accept application?",
+                          message: "The candidate will be marked as accepted for this application.",
+                          confirmLabel: "Accept",
+                          tone: "neutral",
+                          onConfirm: async () => {
+                            await updateReviewStatus(submission.id, "accepted");
+                          },
+                        })}
+                        disabled={submission.reviewStatus === "accepted"}
+                        className="rounded-xl border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Accept
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmAction({
+                          title: "Reject application?",
+                          message: "The candidate will be marked as rejected for this application.",
+                          confirmLabel: "Reject",
+                          tone: "warning",
+                          onConfirm: async () => {
+                            await updateReviewStatus(submission.id, "rejected");
+                          },
+                        })}
+                        disabled={submission.reviewStatus === "rejected"}
+                        className="rounded-xl border border-amber-300 px-3 py-2 text-sm font-medium text-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                      {submission.jobId && (
+                        <Link href={`/admin/jobs/${submission.jobId}/candidates`} className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700">
+                          <BriefcaseBusiness className="mr-2 inline h-4 w-4" />
+                          View Job
+                        </Link>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setActivePreview(submission)}
+                        className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+                      >
+                        View CV
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmAction({
+                          title: "Delete application?",
+                          message: "This permanently removes the application and CV from the candidate history.",
+                          confirmLabel: "Delete",
+                          tone: "danger",
+                          onConfirm: async () => {
+                            await deleteApplication(submission.id);
+                          },
+                        })}
+                        className="rounded-xl border border-rose-300 px-3 py-2 text-sm font-medium text-rose-700"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-xl bg-white p-3 text-sm text-slate-600">
+                    {submission.resumeOriginalName}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        </div>
+      <ConfirmDialog
+        isOpen={Boolean(confirmAction)}
+        title={confirmAction?.title || ""}
+        message={confirmAction?.message || ""}
+        confirmLabel={confirmAction?.confirmLabel || "Confirm"}
+        tone={confirmAction?.tone}
+        onConfirm={async () => {
+          if (!confirmAction) {
+            return;
+          }
+          await confirmAction.onConfirm();
+          setConfirmAction(null);
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
+      <CandidateCvPreviewModal
+        title={activePreview ? [activePreview.firstName, activePreview.lastName].filter(Boolean).join(" ") || activePreview.email : "CV Preview"}
+        resumeName={activePreview?.resumeOriginalName || ""}
+        cvUrl={activePreview ? `/api/admin/cv/${activePreview.id}/resume?disposition=inline` : ""}
+        downloadUrl={activePreview ? `/api/admin/cv/${activePreview.id}/resume` : null}
+        isOpen={Boolean(activePreview)}
+        onClose={() => setActivePreview(null)}
+      />
+    </PortalShell>
+  );
+}

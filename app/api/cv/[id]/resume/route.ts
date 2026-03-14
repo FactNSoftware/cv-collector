@@ -25,6 +25,10 @@ export async function GET(
       return auth.response;
     }
 
+    const url = new URL(request.url);
+    const disposition = url.searchParams.get("disposition") === "inline"
+      ? "inline"
+      : "attachment";
     const { id } = await context.params;
     const submission = await getCvSubmissionById(id);
 
@@ -42,7 +46,7 @@ export async function GET(
       status: 200,
       headers: {
         "Content-Type": submission.resumeMimeType || "application/pdf",
-        "Content-Disposition": `attachment; filename="${toSafeDownloadName(submission.resumeOriginalName)}"`,
+        "Content-Disposition": `${disposition}; filename="${toSafeDownloadName(submission.resumeOriginalName)}"`,
       },
     });
   } catch (error) {
@@ -55,7 +59,7 @@ export async function GET(
 
     console.error("Failed to read CV file", error);
     return NextResponse.json(
-      { message: "Failed to download CV file." },
+      { message: "Failed to load CV file." },
       { status: 500 },
     );
   }

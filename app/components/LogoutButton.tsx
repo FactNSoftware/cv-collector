@@ -2,10 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 export function LogoutButton() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
   const handleLogout = async () => {
     setIsLoading(true);
@@ -23,13 +25,28 @@ export function LogoutButton() {
   };
 
   return (
-    <button
-      type="button"
-      onClick={handleLogout}
-      disabled={isLoading}
-      className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-70"
-    >
-      {isLoading ? "Logging out..." : "Logout"}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => setIsConfirmOpen(true)}
+        disabled={isLoading}
+        className="rounded-2xl border border-[var(--color-border)] bg-white px-4 py-2.5 text-sm font-medium text-[var(--color-ink)] disabled:opacity-70"
+      >
+        {isLoading ? "Logging out..." : "Logout"}
+      </button>
+      <ConfirmDialog
+        isOpen={isConfirmOpen}
+        title="Log out?"
+        message="You will need to sign in again to access your portal."
+        confirmLabel="Logout"
+        tone="warning"
+        isLoading={isLoading}
+        onConfirm={async () => {
+          await handleLogout();
+          setIsConfirmOpen(false);
+        }}
+        onCancel={() => setIsConfirmOpen(false)}
+      />
+    </>
   );
 }
