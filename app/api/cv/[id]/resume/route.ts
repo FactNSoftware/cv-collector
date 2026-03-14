@@ -32,6 +32,10 @@ export async function GET(
       return NextResponse.json({ message: "CV not found." }, { status: 404 });
     }
 
+    if (submission.email !== auth.session.email) {
+      return NextResponse.json({ message: "CV not found." }, { status: 404 });
+    }
+
     const fileBytes = await downloadCvUpload(submission.resumeStoredName);
 
     return new NextResponse(new Uint8Array(fileBytes), {

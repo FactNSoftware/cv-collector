@@ -130,6 +130,19 @@ export const listCvSubmissions = async (): Promise<CvSubmissionRecord[]> => {
   ));
 };
 
+export const listCvSubmissionsByEmail = async (
+  email: string,
+): Promise<CvSubmissionRecord[]> => {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  if (!normalizedEmail) {
+    return [];
+  }
+
+  const submissions = await listCvSubmissions();
+  return submissions.filter((submission) => submission.email === normalizedEmail);
+};
+
 export const getCvSubmissionById = async (
   id: string,
 ): Promise<CvSubmissionRecord | null> => {

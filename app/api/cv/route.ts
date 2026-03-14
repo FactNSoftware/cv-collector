@@ -4,7 +4,7 @@ import { requireApiSession } from "../../../lib/auth-guards";
 import {
   createCvSubmission,
   DuplicateApplicantError,
-  listCvSubmissions,
+  listCvSubmissionsByEmail,
 } from "../../../lib/cv-storage";
 
 export const runtime = "nodejs";
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
       return auth.response;
     }
 
-    const submissions = await listCvSubmissions();
+    const submissions = await listCvSubmissionsByEmail(auth.session.email);
 
     return NextResponse.json({
       items: submissions.map((submission) => ({
@@ -84,6 +84,13 @@ export async function POST(request: Request) {
           missingFields,
         },
         { status: 400 },
+      );
+    }
+
+    if (values.email.trim().toLowerCase() !== auth.session.email) {
+      return NextResponse.json(
+        { message: "Submission email must match the logged-in account." },
+        { status: 403 },
       );
     }
 

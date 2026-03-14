@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { listCvSubmissions } from "../../lib/cv-storage";
+import { listCvSubmissionsByEmail } from "../../lib/cv-storage";
 import { LogoutButton } from "../components/LogoutButton";
 import { requirePageSession } from "../../lib/auth-guards";
 
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function ApplicationsPage() {
   const session = await requirePageSession();
 
-  const submissions = await listCvSubmissions();
+  const submissions = await listCvSubmissionsByEmail(session.email);
 
   return (
     <main className="min-h-screen bg-[#faf9f6] px-4 py-8 sm:px-8">
