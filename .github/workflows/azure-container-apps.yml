@@ -80,16 +80,23 @@ jobs:
       - name: Resolve runtime values
         id: resolve-runtime-values
         uses: azure/CLI@v2
+        env:
+          REGISTRY_NAME: ${{ env.REGISTRY_NAME }}
+          RESOURCE_GROUP: ${{ env.RESOURCE_GROUP }}
+          STORAGE_ACCOUNT_NAME: ${{ env.STORAGE_ACCOUNT_NAME }}
+          COMMUNICATION_SERVICE_NAME: ${{ env.COMMUNICATION_SERVICE_NAME }}
+          EMAIL_SENDER_ADDRESS: ${{ secrets.AZURE_EMAIL_SENDER_ADDRESS }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
         with:
           inlineScript: |
             set -euo pipefail
 
-            if [ -z "$EMAIL_SENDER_ADDRESS" ]; then
+            if [ -z "${EMAIL_SENDER_ADDRESS:-}" ]; then
               echo "AZURE_EMAIL_SENDER_ADDRESS GitHub secret is required."
               exit 1
             fi
 
-            if [ -z "$AUTH_SECRET" ]; then
+            if [ -z "${AUTH_SECRET:-}" ]; then
               echo "AUTH_SECRET GitHub secret is required."
               exit 1
             fi
@@ -127,6 +134,14 @@ jobs:
 
       - name: Create or update container app
         uses: azure/CLI@v2
+        env:
+          REGISTRY_LOGIN_SERVER: ${{ env.REGISTRY_LOGIN_SERVER }}
+          RESOURCE_GROUP: ${{ env.RESOURCE_GROUP }}
+          CONTAINER_APP_NAME: ${{ env.CONTAINER_APP_NAME }}
+          CONTAINER_APP_ENVIRONMENT: ${{ env.CONTAINER_APP_ENVIRONMENT }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          EMAIL_SENDER_ADDRESS: ${{ secrets.AZURE_EMAIL_SENDER_ADDRESS }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
         with:
           inlineScript: |
             set -euo pipefail
