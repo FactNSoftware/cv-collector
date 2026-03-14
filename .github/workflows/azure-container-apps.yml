@@ -20,6 +20,11 @@ env:
   REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_CONTAINER_REGISTRY_LOGIN_SERVER }}
   RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
   CONTAINER_APP_NAME: ${{ secrets.AZURE_CONTAINER_APP_NAME }}
+  CONTAINER_APP_ENVIRONMENT: ${{ secrets.AZURE_CONTAINERAPPS_ENVIRONMENT }}
+  STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
+  COMMUNICATION_SERVICE_NAME: ${{ secrets.AZURE_COMMUNICATION_SERVICE_NAME }}
+  EMAIL_SENDER_ADDRESS: ${{ secrets.AZURE_EMAIL_SENDER_ADDRESS }}
+  AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
   IMAGE_NAME: cv-collector
   NODE_VERSION: 20
 
@@ -72,16 +77,111 @@ jobs:
       - name: Push image
         run: docker push $REGISTRY_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}
 
-      - name: Deploy container app
+      - name: Resolve runtime values
+        id: resolve-runtime-values
         uses: azure/CLI@v2
         with:
           inlineScript: |
-            az containerapp show \
-              --name "$CONTAINER_APP_NAME" \
-              --resource-group "$RESOURCE_GROUP" \
-              --output none
+            set -euo pipefail
 
-            az containerapp update \
+            if [ -z "$EMAIL_SENDER_ADDRESS" ]; then
+              echo "AZURE_EMAIL_SENDER_ADDRESS GitHub secret is required."
+              exit 1
+            fi
+
+            if [ -z "$AUTH_SECRET" ]; then
+              echo "AUTH_SECRET GitHub secret is required."
+              exit 1
+            fi
+
+            STORAGE_CONNECTION_STRING=$(az storage account show-connection-string \
+              --name "$STORAGE_ACCOUNT_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query connectionString \
+              --output tsv)
+
+            COMMUNICATION_CONNECTION_STRING=$(az communication list-key \
+              --name "$COMMUNICATION_SERVICE_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query primaryConnectionString \
+              --output tsv)
+
+            ACR_USERNAME=$(az acr credential show \
+              --name "$REGISTRY_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query username \
+              --output tsv)
+
+            ACR_PASSWORD=$(az acr credential show \
+              --name "$REGISTRY_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query 'passwords[0].value' \
+              --output tsv)
+
+            {
+              echo "storage_connection_string=$STORAGE_CONNECTION_STRING"
+              echo "communication_connection_string=$COMMUNICATION_CONNECTION_STRING"
+              echo "acr_username=$ACR_USERNAME"
+              echo "acr_password=$ACR_PASSWORD"
+            } >> "$GITHUB_OUTPUT"
+
+      - name: Create or update container app
+        uses: azure/CLI@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+
+            IMAGE="$REGISTRY_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}"
+
+            if az containerapp show \
               --name "$CONTAINER_APP_NAME" \
               --resource-group "$RESOURCE_GROUP" \
-              --image "$REGISTRY_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}"
+              --output none 2>/dev/null; then
+              az containerapp secret set \
+                --name "$CONTAINER_APP_NAME" \
+                --resource-group "$RESOURCE_GROUP" \
+                --secrets \
+                  auth-secret="$AUTH_SECRET" \
+                  storage-connection="${{ steps.resolve-runtime-values.outputs.storage_connection_string }}" \
+                  communication-connection="${{ steps.resolve-runtime-values.outputs.communication_connection_string }}"
+
+              az containerapp update \
+                --name "$CONTAINER_APP_NAME" \
+                --resource-group "$RESOURCE_GROUP" \
+                --image "$IMAGE" \
+                --set-env-vars \
+                  NODE_ENV=production \
+                  AZURE_STORAGE_CONNECTION_STRING=secretref:storage-connection \
+                  AZURE_BLOB_CONTAINER=cv-files \
+                  AZURE_TABLES_TABLE_NAME=cvcollector \
+                  AZURE_COMMUNICATION_CONNECTION_STRING=secretref:communication-connection \
+                  AZURE_EMAIL_SENDER_ADDRESS="$EMAIL_SENDER_ADDRESS" \
+                  AUTH_SECRET=secretref:auth-secret
+            else
+              az containerapp create \
+                --name "$CONTAINER_APP_NAME" \
+                --resource-group "$RESOURCE_GROUP" \
+                --environment "$CONTAINER_APP_ENVIRONMENT" \
+                --image "$IMAGE" \
+                --target-port 3000 \
+                --ingress external \
+                --cpu 0.25 \
+                --memory 0.5Gi \
+                --min-replicas 0 \
+                --max-replicas 1 \
+                --registry-server "$REGISTRY_LOGIN_SERVER" \
+                --registry-username "${{ steps.resolve-runtime-values.outputs.acr_username }}" \
+                --registry-password "${{ steps.resolve-runtime-values.outputs.acr_password }}" \
+                --secrets \
+                  auth-secret="$AUTH_SECRET" \
+                  storage-connection="${{ steps.resolve-runtime-values.outputs.storage_connection_string }}" \
+                  communication-connection="${{ steps.resolve-runtime-values.outputs.communication_connection_string }}" \
+                --env-vars \
+                  NODE_ENV=production \
+                  AZURE_STORAGE_CONNECTION_STRING=secretref:storage-connection \
+                  AZURE_BLOB_CONTAINER=cv-files \
+                  AZURE_TABLES_TABLE_NAME=cvcollector \
+                  AZURE_COMMUNICATION_CONNECTION_STRING=secretref:communication-connection \
+                  AZURE_EMAIL_SENDER_ADDRESS="$EMAIL_SENDER_ADDRESS" \
+                  AUTH_SECRET=secretref:auth-secret
+            fi
