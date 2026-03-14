@@ -2,9 +2,11 @@ import { CvSubmissionForm } from "../components/CvSubmissionForm";
 import Link from "next/link";
 import { LogoutButton } from "../components/LogoutButton";
 import { requirePageSession } from "../../lib/auth-guards";
+import { ensureCandidateProfile } from "../../lib/candidate-profile";
 
 export default async function ApplyPage() {
   const session = await requirePageSession();
+  const profile = await ensureCandidateProfile(session.email);
 
   return (
     <main className="min-h-screen bg-white px-4 py-10 sm:px-6 sm:py-14">
@@ -20,7 +22,7 @@ export default async function ApplyPage() {
           <LogoutButton />
         </div>
       </div>
-      <CvSubmissionForm />
+      <CvSubmissionForm sessionEmail={session.email} initialProfile={profile} />
     </main>
   );
 }

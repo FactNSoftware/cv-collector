@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { FormEvent, KeyboardEvent, useState } from "react";
+import { useToast } from "./ToastProvider";
 
 const OTP_LENGTH = 6;
 
@@ -15,13 +16,10 @@ export function OtpLoginForm() {
   const [step, setStep] = useState<"email" | "otp">("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState(getDefaultOtp());
-  const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { showToast } = useToast();
 
   const requestOtp = async () => {
-    setErrorMessage("");
-    setSuccessMessage("");
     setIsSubmitting(true);
 
     try {
@@ -38,14 +36,14 @@ export function OtpLoginForm() {
         .catch(() => ({ message: "Failed to send OTP." }));
 
       if (!response.ok) {
-        setErrorMessage(payload.message || "Failed to send OTP.");
+        showToast(payload.message || "Failed to send OTP.", "error");
         return false;
       }
 
-      setSuccessMessage("OTP sent. Check your inbox.");
+      showToast("OTP sent. Check your inbox.");
       return true;
     } catch {
-      setErrorMessage("Something went wrong while sending OTP.");
+      showToast("Something went wrong while sending OTP.", "error");
       return false;
     } finally {
       setIsSubmitting(false);
@@ -92,13 +90,10 @@ export function OtpLoginForm() {
   const handleOtpSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    setErrorMessage("");
-    setSuccessMessage("");
-
     const otpCode = otp.join("");
 
     if (otpCode.length !== OTP_LENGTH) {
-      setErrorMessage("Enter the full 6-digit OTP.");
+      showToast("Enter the full 6-digit OTP.", "warning");
       return;
     }
 
@@ -118,14 +113,15 @@ export function OtpLoginForm() {
         .catch(() => ({ message: "Failed to verify OTP." }));
 
       if (!response.ok) {
-        setErrorMessage(payload.message || "Failed to verify OTP.");
+        showToast(payload.message || "Failed to verify OTP.", "error");
         return;
       }
 
+      showToast("Logged in successfully.");
       router.push("/apply");
       router.refresh();
     } catch {
-      setErrorMessage("Something went wrong while verifying OTP.");
+      showToast("Something went wrong while verifying OTP.", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -242,16 +238,6 @@ export function OtpLoginForm() {
                   </button>
                 </div>
               </form>
-            )}
-
-            {(errorMessage || successMessage) && (
-              <p
-                className={`mt-5 text-sm ${
-                  errorMessage ? "text-[#d24a43]" : "text-[#19692c]"
-                }`}
-              >
-                {errorMessage || successMessage}
-              </p>
             )}
           </div>
         </div>

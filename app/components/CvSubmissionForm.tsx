@@ -2,6 +2,8 @@
 
 import { FileUp } from "lucide-react";
 import { ChangeEvent, FormEvent, useRef, useState } from "react";
+import type { CandidateProfile } from "../../lib/candidate-profile";
+import { useToast } from "./ToastProvider";
 
 const JOB_OPENINGS = [
   "Frontend Developer",
@@ -21,6 +23,11 @@ type FormValues = {
   resume: File | null;
 };
 
+type CvSubmissionFormProps = {
+  sessionEmail: string;
+  initialProfile: CandidateProfile;
+};
+
 const INITIAL_VALUES: FormValues = {
   firstName: "",
   lastName: "",
@@ -31,13 +38,29 @@ const INITIAL_VALUES: FormValues = {
   resume: null,
 };
 
-export function CvSubmissionForm() {
-  const [values, setValues] = useState<FormValues>(INITIAL_VALUES);
+const toInitialValues = (
+  sessionEmail: string,
+  profile: CandidateProfile,
+): FormValues => ({
+  ...INITIAL_VALUES,
+  firstName: profile.firstName,
+  lastName: profile.lastName,
+  email: sessionEmail,
+  phone: profile.phone,
+  idOrPassportNumber: profile.idOrPassportNumber,
+});
+
+export function CvSubmissionForm({
+  sessionEmail,
+  initialProfile,
+}: CvSubmissionFormProps) {
+  const [values, setValues] = useState<FormValues>(
+    toInitialValues(sessionEmail, initialProfile),
+  );
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState("");
-  const [submitSuccess, setSubmitSuccess] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { showToast } = useToast();
 
   const updateValue = (
     field: Exclude<keyof FormValues, "resume">,
@@ -57,11 +80,8 @@ export function CvSubmissionForm() {
   const handleFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    setSubmitError("");
-    setSubmitSuccess("");
-
     if (!values.resume) {
-      setSubmitError("Please upload your resume as a PDF.");
+      showToast("CV is required. Please upload your resume as a PDF.", "warning");
       return;
     }
 
@@ -87,17 +107,21 @@ export function CvSubmissionForm() {
         .catch(() => ({ message: "Failed to submit application." }));
 
       if (!response.ok) {
-        setSubmitError(payload.message || "Failed to submit application.");
+        showToast(payload.message || "Failed to submit application.", "error");
         return;
       }
 
-      setValues(INITIAL_VALUES);
+      setValues((current) => ({
+        ...current,
+        email: sessionEmail,
+        resume: null,
+      }));
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
-      setSubmitSuccess("Application submitted successfully.");
+      showToast("Application submitted successfully.");
     } catch {
-      setSubmitError("Something went wrong while submitting. Please try again.");
+      showToast("Something went wrong while submitting. Please try again.", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -194,8 +218,8 @@ export function CvSubmissionForm() {
               type="email"
               required
               value={values.email}
-              onChange={(event) => updateValue("email", event.target.value)}
-              className="w-full py-3 px-2 rounded-lg border border-[#d9d2c7] text-sm text-[#171717] outline-none transition focus:border-[#d38133] focus:ring-4 focus:ring-[#f3d8bc]"
+              disabled
+              className="w-full py-3 px-2 rounded-lg border border-[#d9d2c7] bg-slate-100 text-sm text-slate-600 outline-none"
             />
           </div>
 
@@ -275,7 +299,7 @@ export function CvSubmissionForm() {
             <p className="mt-1 text-sm text-[#7c7c7c]">
               {values.resume
                 ? values.resume.name
-                : "Please make sure to upload a PDF"}
+                : "CV is required. Please make sure to upload a PDF"}
             </p>
           </button>
           <input
@@ -297,16 +321,6 @@ export function CvSubmissionForm() {
             {isSubmitting ? "Submitting..." : "Submit Application"}
           </button>
         </div>
-
-        {(submitError || submitSuccess) && (
-          <p
-            className={`text-sm ${
-              submitError ? "text-[#d24a43]" : "text-[#19692c]"
-            }`}
-          >
-            {submitError || submitSuccess}
-          </p>
-        )}
 
         <p className="text-xs  text-[#777777]">
           By clicking &apos;Submit Application&apos;, you agree to receive job

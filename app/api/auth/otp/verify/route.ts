@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAuthSession, SESSION_COOKIE_NAME } from "../../../../../lib/auth-session";
 import { OtpValidationError, verifyLoginOtp } from "../../../../../lib/auth-otp";
+import { ensureCandidateProfile } from "../../../../../lib/candidate-profile";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,7 @@ export async function POST(request: Request) {
     const otp = typeof body.otp === "string" ? body.otp : "";
 
     const result = await verifyLoginOtp(email, otp);
+    await ensureCandidateProfile(result.email);
     const session = await createAuthSession(result.email);
 
     const response = NextResponse.json({ message: "Logged in successfully." });

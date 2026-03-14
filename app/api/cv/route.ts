@@ -6,6 +6,7 @@ import {
   DuplicateApplicantError,
   listCvSubmissionsByEmail,
 } from "../../../lib/cv-storage";
+import { upsertCandidateProfile } from "../../../lib/candidate-profile";
 
 export const runtime = "nodejs";
 
@@ -98,10 +99,18 @@ export async function POST(request: Request) {
 
     if (!(resume instanceof File)) {
       return NextResponse.json(
-        { message: "Please upload a CV file." },
+        { message: "CV is required. Please upload a CV file." },
         { status: 400 },
       );
     }
+
+    await upsertCandidateProfile({
+      email: auth.session.email,
+      firstName: values.firstName,
+      lastName: values.lastName,
+      phone: values.phone,
+      idOrPassportNumber: values.idOrPassportNumber,
+    });
 
     const created = await createCvSubmission({
       ...values,
