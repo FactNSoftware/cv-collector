@@ -10,6 +10,7 @@ const REQUIRED_ENV_NAMES = [
   "AZURE_BLOB_CONTAINER",
 ] as const;
 const JOB_ASSET_PREFIX = "job-assets";
+const JOB_CV_PREFIX = "job-cvs";
 const IMAGE_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -30,6 +31,7 @@ type SaveCvPdfInput = {
   fileName: string;
   mimeType: string;
   fileBuffer: Buffer;
+  folderName?: string;
 };
 
 type SaveJobAssetInput = {
@@ -164,11 +166,17 @@ export const saveCvPdf = async ({
   fileName,
   mimeType,
   fileBuffer,
+  folderName,
 }: SaveCvPdfInput) => {
   validatePdfUpload({ fileName, mimeType, fileBuffer });
 
   const containerClient = await getBlobContainerClient();
-  const storedFileName = `${Date.now()}-${randomUUID()}.pdf`;
+  const safeFolderName = folderName
+    ? folderName.trim().replace(/[^a-zA-Z0-9/_-]+/g, "-").replace(/^\/+|\/+$/g, "")
+    : "";
+  const storedFileName = safeFolderName
+    ? `${JOB_CV_PREFIX}/${safeFolderName}/${Date.now()}-${randomUUID()}.pdf`
+    : `${JOB_CV_PREFIX}/${Date.now()}-${randomUUID()}.pdf`;
   const blobClient = containerClient.getBlockBlobClient(storedFileName);
 
   await blobClient.uploadData(fileBuffer, {

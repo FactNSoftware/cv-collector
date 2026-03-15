@@ -11,7 +11,6 @@ import {
 
 const CV_SCOPE = "cv";
 const CV_SUBMISSION_TYPE = "submission";
-const CV_UNIQUE_TYPE = "unique";
 
 export const CV_REVIEW_STATUSES = [
   "pending",
@@ -153,10 +152,6 @@ const toSubmissionDoc = (
 
 const toSubmissionRowKey = (id: string) => `submission:${id}`;
 
-const toUniqueDocId = (prefix: "email" | "id", value: string) => {
-  return `unique:${prefix}:${encodeURIComponent(value.trim().toLowerCase())}`;
-};
-
 export const listCvSubmissions = async (): Promise<CvSubmissionRecord[]> => {
   const tableClient = await getAppTableClient();
   const entities = tableClient.listEntities<Record<string, unknown>>({
@@ -237,12 +232,19 @@ export const createCvSubmission = async (
   input: CreateCvSubmissionInput,
 ): Promise<CvSubmissionRecord> => {
   const normalizedEmail = input.email.trim().toLowerCase();
-  const normalizedIdOrPassport = input.idOrPassportNumber.trim().toLowerCase();
+  const existingSubmissions = await listCvSubmissionsByEmail(normalizedEmail);
+
+  if (existingSubmissions.some((submission) => submission.jobId === input.jobId)) {
+    throw new DuplicateApplicantError(
+      "You have already applied for this job. Withdraw the current application to apply again.",
+    );
+  }
 
   const savedFile = await saveCvPdf({
     fileName: input.resumeOriginalName,
     mimeType: input.resumeMimeType,
     fileBuffer: input.resumeBuffer,
+    folderName: input.jobId,
   });
 
   try {
@@ -251,24 +253,6 @@ export const createCvSubmission = async (
     const submittedAt = Date.now();
     const normalizedIdValue = input.idOrPassportNumber.trim();
     await tableClient.submitTransaction([
-      ["create", {
-        partitionKey: CV_SCOPE,
-        rowKey: toUniqueDocId("email", normalizedEmail),
-        type: CV_UNIQUE_TYPE,
-        keyType: "email",
-        value: normalizedEmail,
-        submissionId,
-        createdAt: submittedAt,
-      }],
-      ["create", {
-        partitionKey: CV_SCOPE,
-        rowKey: toUniqueDocId("id", normalizedIdOrPassport),
-        type: CV_UNIQUE_TYPE,
-        keyType: "id",
-        value: normalizedIdOrPassport,
-        submissionId,
-        createdAt: submittedAt,
-      }],
       ["create", {
         partitionKey: CV_SCOPE,
         rowKey: toSubmissionRowKey(submissionId),
@@ -322,7 +306,7 @@ export const createCvSubmission = async (
 
     if (isTableConflictError(error)) {
       throw new DuplicateApplicantError(
-        "A user with this email or ID/passport already exists.",
+        "You have already applied for this job. Withdraw the current application to apply again.",
       );
     }
 
@@ -377,25 +361,6 @@ export const deleteCvSubmission = async (id: string): Promise<boolean> => {
   const tableClient = await getAppTableClient();
 
   await tableClient.deleteEntity(CV_SCOPE, toSubmissionRowKey(id));
-
-  try {
-    await tableClient.deleteEntity(CV_SCOPE, toUniqueDocId("email", existing.email));
-  } catch (error) {
-    if (!isTableNotFoundError(error)) {
-      throw error;
-    }
-  }
-
-  try {
-    await tableClient.deleteEntity(
-      CV_SCOPE,
-      toUniqueDocId("id", existing.idOrPassportNumber),
-    );
-  } catch (error) {
-    if (!isTableNotFoundError(error)) {
-      throw error;
-    }
-  }
 
   await deleteCvUpload(existing.resumeStoredName);
   return true;

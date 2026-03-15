@@ -102,7 +102,14 @@ export function NavigationLoadingProvider({
 
       const href = link.getAttribute("href");
 
-      if (!href || href.startsWith("#") || link.target === "_blank" || link.hasAttribute("download")) {
+      if (
+        !href
+        || href.startsWith("#")
+        || href.startsWith("/api/")
+        || link.target === "_blank"
+        || link.hasAttribute("download")
+        || link.getAttribute("data-skip-nav-loading") === "true"
+      ) {
         return;
       }
 
@@ -113,7 +120,10 @@ export function NavigationLoadingProvider({
         return;
       }
 
-      if (url.pathname === currentUrl.pathname && url.search === currentUrl.search) {
+      if (
+        url.pathname.startsWith("/api/")
+        || (url.pathname === currentUrl.pathname && url.search === currentUrl.search)
+      ) {
         return;
       }
 

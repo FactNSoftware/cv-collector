@@ -269,7 +269,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployConta
       ]
       scale: {
         minReplicas: 0
-        maxReplicas: 1
+        maxReplicas: 10
       }
     }
   }

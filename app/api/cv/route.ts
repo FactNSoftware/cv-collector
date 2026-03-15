@@ -6,7 +6,6 @@ import {
   DuplicateApplicantError,
   listCvSubmissionsByEmail,
 } from "../../../lib/cv-storage";
-import { upsertCandidateProfile } from "../../../lib/candidate-profile";
 import { candidateProfileSchema } from "../../../lib/candidate-profile-validation";
 import { getJobDisplayLabel, listPublishedJobs } from "../../../lib/jobs";
 
@@ -136,11 +135,6 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-
-    await upsertCandidateProfile({
-      email: auth.session.email,
-      ...parsedProfile.data,
-    });
 
     const created = await createCvSubmission({
       ...values,

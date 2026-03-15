@@ -193,7 +193,7 @@ jobs:
                 --cpu 0.25 \
                 --memory 0.5Gi \
                 --min-replicas 0 \
-                --max-replicas 1 \
+                --max-replicas 10 \
                 --registry-server "$REGISTRY_LOGIN_SERVER" \
                 --registry-username "${{ steps.resolve-runtime-values.outputs.acr_username }}" \
                 --registry-password "${{ steps.resolve-runtime-values.outputs.acr_password }}" \

@@ -48,7 +48,7 @@ export function CandidateJobApplyView({
   job,
   existingSubmission,
 }: CandidateJobApplyViewProps) {
-  const [savedProfileValues, setSavedProfileValues] = useState<ProfileValues>(toProfileValues(initialProfile));
+  const savedProfileValues = toProfileValues(initialProfile);
   const [profileValues, setProfileValues] = useState<ProfileValues>(toProfileValues(initialProfile));
   const [resume, setResume] = useState<File | null>(null);
   const [submission, setSubmission] = useState<CvSubmissionRecord | null>(existingSubmission);
@@ -57,7 +57,6 @@ export function CandidateJobApplyView({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [isWithdrawConfirmOpen, setIsWithdrawConfirmOpen] = useState(false);
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [hasAttemptedProfileSave, setHasAttemptedProfileSave] = useState(false);
   const [profileTouchedFields, setProfileTouchedFields] = useState<Record<string, boolean>>({});
@@ -138,7 +137,7 @@ export function CandidateJobApplyView({
     setIsProfileModalOpen(false);
   };
 
-  const handleSaveProfile = async () => {
+  const handleContinueWithProfile = async () => {
     setHasAttemptedProfileSave(true);
 
     if (!profileDraftValidation.success) {
@@ -146,64 +145,32 @@ export function CandidateJobApplyView({
       return;
     }
 
-    setIsSavingProfile(true);
+    if (!resume) {
+      showToast("CV is required. Please upload your resume as a PDF.", "warning");
+      return;
+    }
+
+    setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/candidate-profile", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...profileDraftValidation.data,
-        }),
-      });
+      const nextProfileValues = {
+        firstName: profileDraftValidation.data.firstName,
+        lastName: profileDraftValidation.data.lastName,
+        phone: profileDraftValidation.data.phone,
+        idOrPassportNumber: profileDraftValidation.data.idOrPassportNumber,
+      };
 
-      const payload = await response
-        .json()
-        .catch(() => ({ message: "Failed to update profile." }));
-
-      if (!response.ok) {
-        setProfileServerFieldErrors((payload.fieldErrors as Record<string, string[]>) ?? {});
-        showToast(payload.message || "Failed to update profile.", "error");
-        return;
-      }
-
-      const nextSavedValues = toProfileValues(payload.item ?? {
-        ...initialProfile,
-        email: sessionEmail,
-        ...profileDraftValidation.data,
-      });
-
-      setSavedProfileValues(nextSavedValues);
-      setProfileValues(nextSavedValues);
+      setProfileValues(nextProfileValues);
       setHasAttemptedProfileSave(false);
       setProfileTouchedFields({});
       setProfileServerFieldErrors({});
       setIsProfileModalOpen(false);
 
-      if (resume && !submission) {
-        showToast(payload.message || "Profile updated successfully.");
-        setIsSubmitting(true);
-
-        try {
-          const didSubmit = await submitApplication(nextSavedValues);
-
-          if (!didSubmit) {
-            return;
-          }
-        } finally {
-          setIsSubmitting(false);
-        }
-
-        return;
-      }
-
-      showToast(payload.message || "Profile updated successfully.");
+      await submitApplication(nextProfileValues);
     } catch {
-      showToast("Something went wrong while updating your profile.", "error");
+      showToast("Something went wrong while submitting. Please try again.", "error");
     } finally {
-      setIsSavingProfile(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -286,12 +253,10 @@ export function CandidateJobApplyView({
 
   return (
     <>
-      {(isSubmitting || isSavingProfile) && (
+      {isSubmitting && (
         <LoadingOverlay
-          title={isSavingProfile ? "Saving profile" : submission ? "Updating application" : "Submitting application"}
-          message={isSavingProfile
-            ? "Saving your basic details so you can continue."
-            : "Uploading your CV and saving your application."}
+          title={submission ? "Updating application" : "Submitting application"}
+          message="Uploading your CV and saving your application."
         />
       )}
       <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
@@ -531,16 +496,16 @@ export function CandidateJobApplyView({
             <div className="mt-6 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={handleSaveProfile}
-                disabled={isSavingProfile || !isProfileDraftComplete || !hasProfileDraftChanges}
+                onClick={handleContinueWithProfile}
+                disabled={isSubmitting || !isProfileDraftComplete || !hasProfileDraftChanges}
                 className="theme-btn-primary rounded-2xl px-4 py-2 text-sm font-medium disabled:opacity-70"
               >
-                {isSavingProfile ? "Saving..." : "Save And Continue"}
+                {isSubmitting ? "Submitting..." : "Continue And Apply"}
               </button>
               <button
                 type="button"
                 onClick={handleCancelProfileModal}
-                disabled={isSavingProfile}
+                disabled={isSubmitting}
                 className="rounded-2xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-ink)] disabled:opacity-70"
               >
                 Cancel

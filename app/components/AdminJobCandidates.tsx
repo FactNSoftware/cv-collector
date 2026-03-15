@@ -22,6 +22,7 @@ export function AdminJobCandidates({
   submissions,
 }: AdminJobCandidatesProps) {
   const [items, setItems] = useState(submissions);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
   const [activePreview, setActivePreview] = useState<CvSubmissionRecord | null>(null);
   const [confirmAction, setConfirmAction] = useState<null | {
     title: string;
@@ -71,6 +72,41 @@ export function AdminJobCandidates({
     showToast(payload.message || "Application deleted successfully.");
   };
 
+  const downloadAllCvs = async () => {
+    if (items.length === 0 || isDownloadingZip) {
+      return;
+    }
+
+    setIsDownloadingZip(true);
+
+    try {
+      const response = await fetch(`/api/admin/jobs/${job.id}/cvs`);
+      const contentType = response.headers.get("content-type") || "";
+
+      if (!response.ok) {
+        const payload = contentType.includes("application/json")
+          ? await response.json().catch(() => ({ message: "Failed to download CV zip." }))
+          : { message: "Failed to download CV zip." };
+        showToast(payload.message || "Failed to download CV zip.", "error");
+        return;
+      }
+
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `${job.code}-cvs.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(objectUrl);
+    } catch {
+      showToast("Failed to download CV zip.", "error");
+    } finally {
+      setIsDownloadingZip(false);
+    }
+  };
+
   return (
     <PortalShell
       portal="admin"
@@ -107,19 +143,15 @@ export function AdminJobCandidates({
               <h2 className="text-xl font-semibold text-slate-900">Candidate List</h2>
               <p className="text-sm text-slate-600">Open a candidate to inspect their full profile and history.</p>
             </div>
-            <a
-              href={items.length > 0 ? `/api/admin/jobs/${job.id}/cvs` : undefined}
-              aria-disabled={items.length === 0}
-              onClick={(event) => {
-                if (items.length === 0) {
-                  event.preventDefault();
-                }
-              }}
-              className="inline-flex items-center rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+            <button
+              type="button"
+              onClick={downloadAllCvs}
+              disabled={items.length === 0 || isDownloadingZip}
+              className="inline-flex items-center rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <FileArchive className="mr-2 h-4 w-4" />
-              Download All CVs
-            </a>
+              {isDownloadingZip ? "Preparing ZIP..." : "Download All CVs"}
+            </button>
           </div>
 
           <div className="mt-5 space-y-3">

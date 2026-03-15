@@ -15,25 +15,70 @@ This folder contains the Azure infrastructure-as-code for the CV Collector deplo
 - Azure Container Registry Basic
 - Log Analytics workspace
 - Azure Container Apps environment
-- Optional Azure Container App with scale-to-zero-friendly settings
+- Optional Azure Container App with scale-to-zero-friendly settings (`minReplicas: 0`, `maxReplicas: 10`)
 - User-assigned managed identity for ACR pulls
 - Azure Communication Services resource
 - Azure Email Communication Service
 - Optional Azure-managed email domain linked to ACS
 - AcrPull role assignment from the user-assigned identity to ACR
 
-## Deploy
+## Account-Safe Deployment
 
-1. Copy [main.example.bicepparam](/Users/factnsoftware/Documents/cv-collector/infra/main.example.bicepparam) to a real parameter file and replace the placeholders.
+This project is set up so you can switch Azure accounts or subscriptions and deploy the same infrastructure cleanly.
 
-2. Deploy from the repo root:
+### 1. Log in and select the right subscription
 
 ```bash
-az deployment sub create \
-  --location centralindia \
-  --template-file infra/main.bicep \
-  --parameters @infra/main.example.bicepparam
+az login
+az account list --output table
+az account set --subscription "<subscription-name-or-id>"
 ```
+
+Check the active subscription before every deploy:
+
+```bash
+az account show --output table
+```
+
+### 2. Create your own parameter file
+
+Copy [main.example.bicepparam](/Users/factnsoftware/Documents/cv-collector/infra/main.example.bicepparam) to a real file such as `infra/main.prod.bicepparam` and replace the placeholders.
+
+### 3. Validate before deploy
+
+From the repo root:
+
+```bash
+infra/deploy.sh validate \
+  --subscription "<subscription-name-or-id>" \
+  --params infra/main.prod.bicepparam
+```
+
+### 4. Deploy
+
+If the resource group does not exist yet:
+
+```bash
+infra/deploy.sh deploy \
+  --subscription "<subscription-name-or-id>" \
+  --params infra/main.prod.bicepparam \
+  --create-rg
+```
+
+If the resource group already exists:
+
+```bash
+infra/deploy.sh deploy \
+  --subscription "<subscription-name-or-id>" \
+  --params infra/main.prod.bicepparam
+```
+
+The script:
+
+- switches to the requested subscription
+- reads `resourceGroupName` and `location` from the `.bicepparam` file
+- optionally creates the resource group
+- runs a subscription-scope Bicep validation or deployment
 
 ## Important Notes
 
@@ -42,3 +87,4 @@ az deployment sub create \
 - `emailSenderAddress` must be a real verified sender address before you enable the Container App.
 - The app creates the Blob container and Table Storage table at startup, so the template does not need to pre-create them.
 - Azure Communication Services Email still has some operational steps around sender/domain usage that are easier to confirm after deployment in the portal or CLI.
+- For a brand new Azure account, deploy infrastructure first, then configure GitHub OIDC and runtime secrets, then enable app deployment.
