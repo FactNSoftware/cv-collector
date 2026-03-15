@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
+import { buildAdminJobListItems } from "../../../../lib/admin-list-types";
+import { recordAdminAuditEvent } from "../../../../lib/audit-log";
 import { requireAdminApiSession } from "../../../../lib/auth-guards";
 import { listJobs, upsertJob } from "../../../../lib/jobs";
+import { listCvSubmissions } from "../../../../lib/cv-storage";
+import { getCursorParam, getPageLimit, paginateItems } from "../../../../lib/pagination";
 
 export const runtime = "nodejs";
 
@@ -29,8 +33,43 @@ export async function GET(request: Request) {
     return auth.response;
   }
 
-  const jobs = await listJobs();
-  return NextResponse.json({ items: jobs });
+  const url = new URL(request.url);
+  const limit = getPageLimit(url.searchParams.get("limit"));
+  const cursor = getCursorParam(url.searchParams.get("cursor"));
+  const searchQuery = url.searchParams.get("q")?.trim().toLowerCase() ?? "";
+  const statusFilter = url.searchParams.get("status")?.trim().toLowerCase() ?? "all";
+  const [jobs, submissions] = await Promise.all([
+    listJobs(),
+    listCvSubmissions(),
+  ]);
+  const items = buildAdminJobListItems(jobs, submissions).filter((job) => {
+    if (statusFilter === "published" && !job.isPublished) {
+      return false;
+    }
+
+    if (statusFilter === "draft" && job.isPublished) {
+      return false;
+    }
+
+    if (!searchQuery) {
+      return true;
+    }
+
+    const haystack = [
+      job.code,
+      job.title,
+      job.summary,
+      job.department,
+      job.location,
+      job.employmentType,
+      job.workplaceType,
+      job.experienceLevel,
+    ].join(" ").toLowerCase();
+
+    return haystack.includes(searchQuery);
+  });
+  const page = paginateItems(items, limit, cursor);
+  return NextResponse.json(page);
 }
 
 export async function POST(request: Request) {
@@ -63,6 +102,22 @@ export async function POST(request: Request) {
       requirements: body.requirements ?? "",
       benefits: body.benefits ?? "",
       isPublished: Boolean(body.isPublished),
+    });
+
+    await recordAdminAuditEvent({
+      actorEmail: auth.session.email,
+      action: "job.create",
+      targetType: "job",
+      targetId: job.id,
+      summary: `Created ${job.isPublished ? "published" : "draft"} job ${job.code} - ${job.title}`,
+      requestMethod: request.method,
+      requestPath: new URL(request.url).pathname,
+      userAgent: request.headers.get("user-agent") ?? "",
+      details: {
+        jobCode: job.code,
+        title: job.title,
+        isPublished: job.isPublished,
+      },
     });
 
     return NextResponse.json({

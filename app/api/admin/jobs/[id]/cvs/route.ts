@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 import { NextResponse } from "next/server";
+import { recordAdminAuditEvent } from "../../../../../../lib/audit-log";
 import {
   CvFileNotFoundError,
   downloadCvUpload,
@@ -58,6 +59,21 @@ export async function GET(
     }
 
     const responseBody = await zip.generateAsync({ type: "arraybuffer" });
+
+    await recordAdminAuditEvent({
+      actorEmail: auth.session.email,
+      action: "cv.download_zip",
+      targetType: "job",
+      targetId: job.id,
+      summary: `Downloaded all CVs for ${job.code} - ${job.title}`,
+      requestMethod: request.method,
+      requestPath: new URL(request.url).pathname,
+      userAgent: request.headers.get("user-agent") ?? "",
+      details: {
+        jobCode: job.code,
+        submissionCount: submissions.length,
+      },
+    });
 
     return new NextResponse(responseBody, {
       status: 200,

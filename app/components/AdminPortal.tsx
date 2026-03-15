@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BriefcaseBusiness, Settings, Users } from "lucide-react";
+import { BriefcaseBusiness, ClipboardList, Settings, Users } from "lucide-react";
 import type { AdminAccount } from "../../lib/admin-access";
 import { PortalShell } from "./PortalShell";
 
@@ -84,6 +84,11 @@ export function AdminPortal({
                 <Settings className="h-5 w-5 text-[var(--color-brand)]" />
                 <h2 className="mt-4 text-lg font-semibold">Admin Settings</h2>
                 <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">Add admins and review current access holders.</p>
+              </Link>
+              <Link href="/admin/audit" className="rounded-[24px] border border-[var(--color-border)] bg-white p-5 transition hover:border-[var(--color-border-strong)]">
+                <ClipboardList className="h-5 w-5 text-[var(--color-brand)]" />
+                <h2 className="mt-4 text-lg font-semibold">Audit Trail</h2>
+                <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">Review immutable admin activity and sensitive CV access logs.</p>
               </Link>
             </div>
           </article>

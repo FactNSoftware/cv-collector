@@ -8,6 +8,7 @@ import {
   isTableConflictError,
   isTableNotFoundError,
 } from "./azure-tables";
+import { buildPageInfo, type PageInfo } from "./pagination";
 
 const CV_SCOPE = "cv";
 const CV_SUBMISSION_TYPE = "submission";
@@ -38,6 +39,11 @@ export type CvSubmissionRecord = {
   reviewedAt: string | null;
   reviewedBy: string;
   submittedAt: string;
+};
+
+export type CvSubmissionPage = {
+  items: CvSubmissionRecord[];
+  pageInfo: PageInfo;
 };
 
 type CreateCvSubmissionInput = {
@@ -196,6 +202,57 @@ export const listCvSubmissionsByJobId = async (
 
   const submissions = await listCvSubmissions();
   return submissions.filter((submission) => submission.jobId === normalizedJobId);
+};
+
+export const listCvSubmissionsPage = async ({
+  limit,
+  cursor,
+  email,
+  jobId,
+}: {
+  limit: number;
+  cursor?: string;
+  email?: string;
+  jobId?: string;
+}): Promise<CvSubmissionPage> => {
+  const filters = [
+    `PartitionKey eq '${CV_SCOPE}'`,
+    `type eq '${CV_SUBMISSION_TYPE}'`,
+  ];
+
+  if (email?.trim()) {
+    filters.push(`email eq '${email.trim().toLowerCase().replace(/'/g, "''")}'`);
+  }
+
+  if (jobId?.trim()) {
+    filters.push(`jobId eq '${jobId.trim().replace(/'/g, "''")}'`);
+  }
+
+  const tableClient = await getAppTableClient();
+  const pages = tableClient.listEntities<Record<string, unknown>>({
+    queryOptions: {
+      filter: filters.join(" and "),
+    },
+  }).byPage({
+    continuationToken: cursor || undefined,
+    maxPageSize: limit,
+  });
+
+  for await (const page of pages) {
+    const items = [...page]
+      .map((entity) => toRecord(toSubmissionDoc(String(entity.rowKey ?? ""), entity)))
+      .sort((left, right) => new Date(right.submittedAt).getTime() - new Date(left.submittedAt).getTime());
+
+    return {
+      items,
+      pageInfo: buildPageInfo(limit, page.continuationToken),
+    };
+  }
+
+  return {
+    items: [],
+    pageInfo: buildPageInfo(limit),
+  };
 };
 
 export const getCvSubmissionById = async (

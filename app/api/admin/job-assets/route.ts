@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAdminAuditEvent } from "../../../../lib/audit-log";
 import { requireAdminApiSession } from "../../../../lib/auth-guards";
 import { PdfValidationError } from "../../../../lib/cv-file-service";
 import { saveJobDescriptionImage } from "../../../../lib/job-assets";
@@ -27,6 +28,17 @@ export async function POST(request: Request) {
       fileName: image.name || "job-image",
       mimeType: image.type,
       fileBuffer: Buffer.from(await image.arrayBuffer()),
+    });
+
+    await recordAdminAuditEvent({
+      actorEmail: auth.session.email,
+      action: "job_asset.upload",
+      targetType: "job_asset",
+      targetId: saved.storedFileName,
+      summary: `Uploaded job description image ${image.name || "job-image"}`,
+      requestMethod: request.method,
+      requestPath: new URL(request.url).pathname,
+      userAgent: request.headers.get("user-agent") ?? "",
     });
 
     return NextResponse.json({

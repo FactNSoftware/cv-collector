@@ -3,6 +3,7 @@ import {
   CvFileNotFoundError,
   downloadCvUpload,
 } from "../../../../../../lib/cv-file-service";
+import { recordAdminAuditEvent } from "../../../../../../lib/audit-log";
 import { requireAdminApiSession } from "../../../../../../lib/auth-guards";
 import { getCvSubmissionById } from "../../../../../../lib/cv-storage";
 
@@ -35,6 +36,22 @@ export async function GET(
     }
 
     const fileBytes = await downloadCvUpload(submission.resumeStoredName);
+
+    await recordAdminAuditEvent({
+      actorEmail: auth.session.email,
+      action: disposition === "inline" ? "cv.view" : "cv.download",
+      targetType: "cv",
+      targetId: submission.id,
+      summary: `${disposition === "inline" ? "Viewed" : "Downloaded"} CV for ${submission.email}`,
+      requestMethod: request.method,
+      requestPath: url.pathname,
+      userAgent: request.headers.get("user-agent") ?? "",
+      details: {
+        candidateEmail: submission.email,
+        jobCode: submission.jobCode,
+        disposition,
+      },
+    });
 
     return new NextResponse(new Uint8Array(fileBytes), {
       status: 200,

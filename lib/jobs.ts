@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { getAppTableClient, isTableNotFoundError } from "./azure-tables";
+import { buildPageInfo, type PageInfo } from "./pagination";
 
 const JOB_SCOPE = "job";
 const JOB_TYPE = "job";
@@ -84,6 +85,11 @@ export type JobRecord = {
   isPublished: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+export type JobRecordPage = {
+  items: JobRecord[];
+  pageInfo: PageInfo;
 };
 
 export type UpsertJobInput = {
@@ -250,6 +256,39 @@ export const listJobs = async (): Promise<JobRecord[]> => {
 export const listPublishedJobs = async (): Promise<JobRecord[]> => {
   const jobs = await listJobs();
   return jobs.filter((job) => job.isPublished);
+};
+
+export const listJobsPage = async (
+  limit: number,
+  cursor?: string,
+  publishedOnly = false,
+): Promise<JobRecordPage> => {
+  const tableClient = await getAppTableClient();
+  const filter = publishedOnly
+    ? `PartitionKey eq '${JOB_SCOPE}' and type eq '${JOB_TYPE}' and isPublished eq true`
+    : `PartitionKey eq '${JOB_SCOPE}' and type eq '${JOB_TYPE}'`;
+  const pages = tableClient.listEntities<JobEntity>({
+    queryOptions: { filter },
+  }).byPage({
+    continuationToken: cursor || undefined,
+    maxPageSize: limit,
+  });
+
+  for await (const page of pages) {
+    const items = [...page]
+      .map((entity) => toJobRecord(entity))
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+
+    return {
+      items,
+      pageInfo: buildPageInfo(limit, page.continuationToken),
+    };
+  }
+
+  return {
+    items: [],
+    pageInfo: buildPageInfo(limit),
+  };
 };
 
 export const getJobById = async (id: string): Promise<JobRecord | null> => {

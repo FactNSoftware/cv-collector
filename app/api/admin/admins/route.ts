@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
+import { recordAdminAuditEvent } from "../../../../lib/audit-log";
 import { requireAdminApiSession } from "../../../../lib/auth-guards";
 import {
   createAdminAccount,
   listAdminAccounts,
 } from "../../../../lib/admin-access";
 import { ensureCandidateProfile } from "../../../../lib/candidate-profile";
+import { getCursorParam, getPageLimit, paginateItems } from "../../../../lib/pagination";
 
 export const runtime = "nodejs";
 
@@ -19,8 +21,22 @@ export async function GET(request: Request) {
     return auth.response;
   }
 
-  const admins = await listAdminAccounts();
-  return NextResponse.json({ items: admins });
+  const url = new URL(request.url);
+  const limit = getPageLimit(url.searchParams.get("limit"));
+  const cursor = getCursorParam(url.searchParams.get("cursor"));
+  const searchQuery = url.searchParams.get("q")?.trim().toLowerCase() ?? "";
+  const items = (await listAdminAccounts()).filter((admin) => {
+    if (!searchQuery) {
+      return true;
+    }
+
+    return [
+      admin.email,
+      admin.createdBy,
+    ].join(" ").toLowerCase().includes(searchQuery);
+  });
+  const page = paginateItems(items, limit, cursor);
+  return NextResponse.json(page);
 }
 
 export async function POST(request: Request) {
@@ -40,6 +56,17 @@ export async function POST(request: Request) {
 
     await ensureCandidateProfile(email);
     const admin = await createAdminAccount(email, auth.session.email);
+
+    await recordAdminAuditEvent({
+      actorEmail: auth.session.email,
+      action: "admin.create",
+      targetType: "admin_account",
+      targetId: admin.email,
+      summary: `Granted admin access to ${admin.email}`,
+      requestMethod: request.method,
+      requestPath: new URL(request.url).pathname,
+      userAgent: request.headers.get("user-agent") ?? "",
+    });
 
     return NextResponse.json({
       message: "Admin account created successfully.",

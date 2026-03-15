@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ClipboardList,
   BriefcaseBusiness,
   House,
   LayoutGrid,
@@ -45,6 +46,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/admin", label: "Dashboard", icon: House },
   { href: "/admin/jobs", label: "Jobs", icon: BriefcaseBusiness, matchPrefix: "/admin/jobs" },
   { href: "/admin/candidates", label: "Candidates", icon: Users, matchPrefix: "/admin/candidates" },
+  { href: "/admin/audit", label: "Audit", icon: ClipboardList, matchPrefix: "/admin/audit" },
   { href: "/admin/settings", label: "Settings", icon: Settings, matchPrefix: "/admin/settings" },
 ];
 
@@ -120,6 +122,10 @@ const getBreadcrumbs = (
         { href: "/admin/candidates", label: "Candidates" },
         { label: title },
       ];
+    }
+
+    if (pathname === "/admin/audit") {
+      return [{ href: "/admin", label: "Dashboard" }, { label: "Audit" }];
     }
 
     if (pathname === "/admin/settings") {

@@ -4,10 +4,11 @@ import { requireApiSession } from "../../../lib/auth-guards";
 import {
   createCvSubmission,
   DuplicateApplicantError,
-  listCvSubmissionsByEmail,
+  listCvSubmissionsPage,
 } from "../../../lib/cv-storage";
 import { candidateProfileSchema } from "../../../lib/candidate-profile-validation";
 import { getJobDisplayLabel, listPublishedJobs } from "../../../lib/jobs";
+import { getCursorParam, getPageLimit } from "../../../lib/pagination";
 
 export const runtime = "nodejs";
 
@@ -33,10 +34,17 @@ export async function GET(request: Request) {
       return auth.response;
     }
 
-    const submissions = await listCvSubmissionsByEmail(auth.session.email);
+    const url = new URL(request.url);
+    const limit = getPageLimit(url.searchParams.get("limit"));
+    const cursor = getCursorParam(url.searchParams.get("cursor"));
+    const page = await listCvSubmissionsPage({
+      limit,
+      cursor,
+      email: auth.session.email,
+    });
 
     return NextResponse.json({
-      items: submissions.map((submission) => ({
+      items: page.items.map((submission) => ({
         id: submission.id,
         firstName: submission.firstName,
         lastName: submission.lastName,
@@ -50,6 +58,7 @@ export async function GET(request: Request) {
         reviewedAt: submission.reviewedAt,
         submittedAt: submission.submittedAt,
       })),
+      pageInfo: page.pageInfo,
     });
   } catch (error) {
     console.error("Failed to read CV submissions", error);

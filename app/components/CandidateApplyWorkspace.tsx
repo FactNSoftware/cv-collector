@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { ArrowRight, BriefcaseBusiness, MapPin, TimerReset } from "lucide-react";
+import { useMemo, useState } from "react";
 import type { CandidateProfile } from "../../lib/candidate-profile";
 import type { CvSubmissionRecord } from "../../lib/cv-storage";
 import type { JobRecord } from "../../lib/jobs";
+import { useInfiniteList } from "./useInfiniteList";
 
 type CandidateApplyWorkspaceProps = {
   sessionEmail: string;
@@ -30,6 +32,39 @@ export function CandidateApplyWorkspace({
 }: CandidateApplyWorkspaceProps) {
   const profileReady = isProfileReady(profile);
   const appliedJobIds = new Set(submissions.map((submission) => submission.jobId));
+  const [searchQuery, setSearchQuery] = useState("");
+  const [workplaceFilter, setWorkplaceFilter] = useState("all");
+  const filteredJobs = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return jobs.filter((job) => {
+      if (workplaceFilter !== "all" && job.workplaceType !== workplaceFilter) {
+        return false;
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      const haystack = [
+        job.code,
+        job.title,
+        job.summary,
+        job.department,
+        job.location,
+        job.employmentType,
+        job.workplaceType,
+        job.experienceLevel,
+      ].join(" ").toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }, [jobs, searchQuery, workplaceFilter]);
+  const { visibleItems, sentinelRef, hasMore } = useInfiniteList(
+    filteredJobs,
+    `${searchQuery}|${workplaceFilter}|${filteredJobs.length}`,
+    8,
+  );
 
   return (
     <div className="space-y-5">
@@ -104,14 +139,32 @@ export function CandidateApplyWorkspace({
             </h2>
           </div>
         </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-[1fr_220px]">
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search jobs by title, code, department, location"
+            className="h-12 rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand)]"
+          />
+          <select
+            value={workplaceFilter}
+            onChange={(event) => setWorkplaceFilter(event.target.value)}
+            className="h-12 rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand)]"
+          >
+            <option value="all">All workplace types</option>
+            <option value="On-site">On-site</option>
+            <option value="Hybrid">Hybrid</option>
+            <option value="Remote">Remote</option>
+          </select>
+        </div>
 
-        {jobs.length === 0 ? (
+        {filteredJobs.length === 0 ? (
           <div className="mt-5 rounded-[24px] border border-dashed border-[var(--color-border)] bg-white/70 p-6 text-sm leading-6 text-[var(--color-muted)]">
-            No published jobs are available right now.
+            No published jobs match the current filters.
           </div>
         ) : (
           <div className="mt-5 grid gap-4 xl:grid-cols-2">
-            {jobs.map((job) => (
+            {visibleItems.map((job) => (
               (() => {
                 const hasApplied = appliedJobIds.has(job.id);
 
@@ -162,6 +215,14 @@ export function CandidateApplyWorkspace({
                 );
               })()
             ))}
+            {hasMore && (
+              <>
+                <div ref={sentinelRef} className="xl:col-span-2" />
+                <div className="xl:col-span-2 rounded-[24px] border border-[var(--color-border)] bg-white/70 p-4 text-center text-sm text-[var(--color-muted)]">
+                  Loading more jobs...
+                </div>
+              </>
+            )}
           </div>
         )}
       </section>

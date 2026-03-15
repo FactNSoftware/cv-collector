@@ -1,4 +1,5 @@
 import { getAppTableClient, isTableNotFoundError } from "./azure-tables";
+import { buildPageInfo, type PageInfo } from "./pagination";
 
 const ADMIN_SCOPE = "admin";
 const ADMIN_ACCOUNT_TYPE = "account";
@@ -17,6 +18,11 @@ export type AdminAccount = {
   email: string;
   createdAt: string;
   createdBy: string;
+};
+
+export type AdminAccountPage = {
+  items: AdminAccount[];
+  pageInfo: PageInfo;
 };
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
@@ -187,4 +193,35 @@ export const listAdminAccounts = async (): Promise<AdminAccount[]> => {
   }
 
   return items.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+};
+
+export const listAdminAccountsPage = async (
+  limit: number,
+  cursor?: string,
+): Promise<AdminAccountPage> => {
+  const tableClient = await getAppTableClient();
+  const pages = tableClient.listEntities<AdminAccountEntity>({
+    queryOptions: {
+      filter: `PartitionKey eq '${ADMIN_SCOPE}' and type eq '${ADMIN_ACCOUNT_TYPE}'`,
+    },
+  }).byPage({
+    continuationToken: cursor || undefined,
+    maxPageSize: limit,
+  });
+
+  for await (const page of pages) {
+    const items = [...page]
+      .map((entity) => toAdminAccount(entity))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
+    return {
+      items,
+      pageInfo: buildPageInfo(limit, page.continuationToken),
+    };
+  }
+
+  return {
+    items: [],
+    pageInfo: buildPageInfo(limit),
+  };
 };

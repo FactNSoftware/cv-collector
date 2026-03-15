@@ -1,4 +1,5 @@
 import { getAppTableClient, isTableNotFoundError } from "./azure-tables";
+import { buildPageInfo, type PageInfo } from "./pagination";
 
 const CANDIDATE_SCOPE = "candidate";
 const CANDIDATE_PROFILE_TYPE = "profile";
@@ -10,6 +11,11 @@ export type CandidateProfile = {
   phone: string;
   idOrPassportNumber: string;
   updatedAt: string | null;
+};
+
+export type CandidateProfilePage = {
+  items: CandidateProfile[];
+  pageInfo: PageInfo;
 };
 
 type CandidateProfileEntity = {
@@ -162,4 +168,35 @@ export const listCandidateProfiles = async (): Promise<CandidateProfile[]> => {
   }
 
   return items.sort((left, right) => left.email.localeCompare(right.email));
+};
+
+export const listCandidateProfilesPage = async (
+  limit: number,
+  cursor?: string,
+): Promise<CandidateProfilePage> => {
+  const tableClient = await getAppTableClient();
+  const pages = tableClient.listEntities<CandidateProfileEntity>({
+    queryOptions: {
+      filter: `PartitionKey eq '${CANDIDATE_SCOPE}' and type eq '${CANDIDATE_PROFILE_TYPE}'`,
+    },
+  }).byPage({
+    continuationToken: cursor || undefined,
+    maxPageSize: limit,
+  });
+
+  for await (const page of pages) {
+    const items = [...page]
+      .map((entity) => toProfile(entity))
+      .sort((left, right) => left.email.localeCompare(right.email));
+
+    return {
+      items,
+      pageInfo: buildPageInfo(limit, page.continuationToken),
+    };
+  }
+
+  return {
+    items: [],
+    pageInfo: buildPageInfo(limit),
+  };
 };

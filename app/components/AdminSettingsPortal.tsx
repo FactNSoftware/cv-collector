@@ -1,29 +1,114 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { Pencil, Trash2 } from "lucide-react";
+import { FormEvent, useCallback, useMemo, useState } from "react";
 import type { AdminAccount } from "../../lib/admin-access";
+import type { PageInfo } from "../../lib/pagination";
+import { AdminAccountsCardView } from "./AdminAccountsCardView";
+import { AdminDataTable } from "./AdminDataTable";
+import { AdminRowActionMenu } from "./AdminRowActionMenu";
+import { AdminViewModeToggle } from "./AdminViewModeToggle";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { LoadingOverlay } from "./LoadingOverlay";
 import { PortalShell } from "./PortalShell";
+import { usePersistedViewMode } from "./usePersistedViewMode";
+import { useServerInfiniteList } from "./useServerInfiniteList";
+import { useServerPagination } from "./useServerPagination";
 import { useToast } from "./ToastProvider";
 
 type AdminSettingsPortalProps = {
   sessionEmail: string;
   initialAdmins: AdminAccount[];
+  initialPageInfo: PageInfo;
+};
+
+const createQueryString = ({
+  limit,
+  cursor,
+  searchQuery,
+}: {
+  limit: number;
+  cursor?: string;
+  searchQuery: string;
+}) => {
+  const params = new URLSearchParams({
+    limit: String(limit),
+  });
+
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+
+  if (searchQuery.trim()) {
+    params.set("q", searchQuery.trim());
+  }
+
+  return params.toString();
 };
 
 export function AdminSettingsPortal({
   sessionEmail,
   initialAdmins,
+  initialPageInfo,
 }: AdminSettingsPortalProps) {
-  const [admins, setAdmins] = useState(initialAdmins);
   const [adminEmail, setAdminEmail] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
   const [editingEmail, setEditingEmail] = useState<string | null>(null);
   const [editedEmail, setEditedEmail] = useState("");
   const [busyAdminEmail, setBusyAdminEmail] = useState<string | null>(null);
   const [pendingDeleteAdminEmail, setPendingDeleteAdminEmail] = useState<string | null>(null);
+  const { viewMode, setViewMode } = usePersistedViewMode("admin-settings-view-mode", "table");
   const { showToast } = useToast();
+  const resetKey = searchQuery;
+
+  const fetchPage = useCallback(async (cursor?: string) => {
+    const response = await fetch(`/api/admin/admins?${createQueryString({
+      limit: initialPageInfo.limit,
+      cursor,
+      searchQuery,
+    })}`);
+    const payload = await response.json().catch(() => ({
+      items: [],
+      pageInfo: { limit: initialPageInfo.limit, nextCursor: null, hasMore: false },
+    }));
+
+    if (!response.ok) {
+      throw new Error(payload.message || "Failed to load admins.");
+    }
+
+    return payload;
+  }, [initialPageInfo.limit, searchQuery]);
+
+  const {
+    items,
+    setItems,
+    isLoading,
+    pageIndex,
+    canPreviousPage,
+    canNextPage,
+    goToNextPage,
+    goToPreviousPage,
+  } = useServerPagination<AdminAccount>({
+    initialItems: initialAdmins,
+    initialPageInfo,
+    resetKey,
+    loadPage: fetchPage,
+  });
+
+  const {
+    items: cardItems,
+    setItems: setCardItems,
+    isLoading: isCardLoading,
+    isLoadingMore: isCardLoadingMore,
+    sentinelRef: cardSentinelRef,
+  } = useServerInfiniteList<AdminAccount>({
+    initialItems: initialAdmins,
+    initialPageInfo,
+    resetKey,
+    loadPage: fetchPage,
+  });
 
   const handleCreateAdmin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -36,16 +121,15 @@ export function AdminSettingsPortal({
         body: JSON.stringify({ email: adminEmail }),
       });
 
-      const payload = await response
-        .json()
-        .catch(() => ({ message: "Failed to create admin." }));
+      const payload = await response.json().catch(() => ({ message: "Failed to create admin." }));
 
       if (!response.ok) {
         showToast(payload.message || "Failed to create admin.", "error");
         return;
       }
 
-      setAdmins((current) => [payload.item as AdminAccount, ...current]);
+      setItems((current) => [payload.item as AdminAccount, ...current]);
+      setCardItems((current) => [payload.item as AdminAccount, ...current]);
       setAdminEmail("");
       showToast(payload.message || "Admin account created successfully.");
     } catch {
@@ -60,12 +144,12 @@ export function AdminSettingsPortal({
     setEditedEmail(email);
   };
 
-  const cancelEditingAdmin = () => {
+  const cancelEditingAdmin = useCallback(() => {
     setEditingEmail(null);
     setEditedEmail("");
-  };
+  }, []);
 
-  const handleUpdateAdmin = async (currentEmail: string) => {
+  const handleUpdateAdmin = useCallback(async (currentEmail: string) => {
     setBusyAdminEmail(currentEmail);
 
     try {
@@ -75,16 +159,17 @@ export function AdminSettingsPortal({
         body: JSON.stringify({ email: editedEmail }),
       });
 
-      const payload = await response
-        .json()
-        .catch(() => ({ message: "Failed to update admin." }));
+      const payload = await response.json().catch(() => ({ message: "Failed to update admin." }));
 
       if (!response.ok) {
         showToast(payload.message || "Failed to update admin.", "error");
         return;
       }
 
-      setAdmins((current) => current.map((item) => (
+      setItems((current) => current.map((item) => (
+        item.email === currentEmail ? payload.item as AdminAccount : item
+      )));
+      setCardItems((current) => current.map((item) => (
         item.email === currentEmail ? payload.item as AdminAccount : item
       )));
       cancelEditingAdmin();
@@ -94,7 +179,7 @@ export function AdminSettingsPortal({
     } finally {
       setBusyAdminEmail(null);
     }
-  };
+  }, [cancelEditingAdmin, editedEmail, setCardItems, setItems, showToast]);
 
   const handleDeleteAdmin = async (email: string) => {
     if (email === sessionEmail) {
@@ -109,16 +194,15 @@ export function AdminSettingsPortal({
         method: "DELETE",
       });
 
-      const payload = await response
-        .json()
-        .catch(() => ({ message: "Failed to delete admin." }));
+      const payload = await response.json().catch(() => ({ message: "Failed to delete admin." }));
 
       if (!response.ok) {
         showToast(payload.message || "Failed to delete admin.", "error");
         return;
       }
 
-      setAdmins((current) => current.filter((item) => item.email !== email));
+      setItems((current) => current.filter((item) => item.email !== email));
+      setCardItems((current) => current.filter((item) => item.email !== email));
       if (editingEmail === email) {
         cancelEditingAdmin();
       }
@@ -129,6 +213,82 @@ export function AdminSettingsPortal({
       setBusyAdminEmail(null);
     }
   };
+
+  const columns = useMemo<ColumnDef<AdminAccount>[]>(() => [
+    {
+      accessorKey: "email",
+      header: "Admin",
+      cell: ({ row }) => (
+        <div className="space-y-1">
+          <div className="font-semibold text-[var(--color-ink)]">{row.original.email}</div>
+          <div className="text-xs text-[var(--color-muted)]">Added by {row.original.createdBy}</div>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "createdAt",
+      header: "Created",
+      cell: ({ row }) => (
+        <div className="text-sm text-[var(--color-muted)]">
+          {new Date(row.original.createdAt).toLocaleString()}
+        </div>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => {
+        const admin = row.original;
+
+        return editingEmail === admin.email ? (
+          <div className="flex flex-wrap justify-end gap-2">
+            <input
+              value={editedEmail}
+              onChange={(event) => setEditedEmail(event.target.value)}
+              placeholder="admin@example.com"
+              className="h-10 min-w-64 rounded-xl border border-[var(--color-border)] bg-white px-3 text-sm outline-none focus:border-[var(--color-brand)]"
+            />
+            <button
+              type="button"
+              onClick={() => void handleUpdateAdmin(admin.email)}
+              disabled={busyAdminEmail === admin.email}
+              className="theme-btn-primary rounded-xl px-3 py-2 text-sm font-medium disabled:opacity-70"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={cancelEditingAdmin}
+              disabled={busyAdminEmail === admin.email}
+              className="rounded-xl border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-[var(--color-ink)]"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <AdminRowActionMenu
+              items={[
+                {
+                  label: "Edit",
+                  icon: <Pencil className="h-4 w-4" />,
+                  onSelect: () => startEditingAdmin(admin.email),
+                  disabled: busyAdminEmail === admin.email,
+                },
+                {
+                  label: admin.email === sessionEmail ? "Cannot Delete Self" : "Delete",
+                  icon: <Trash2 className="h-4 w-4" />,
+                  onSelect: () => setPendingDeleteAdminEmail(admin.email),
+                  disabled: busyAdminEmail === admin.email || admin.email === sessionEmail,
+                  tone: "danger",
+                },
+              ]}
+            />
+          </div>
+        );
+      },
+    },
+  ], [busyAdminEmail, cancelEditingAdmin, editedEmail, editingEmail, handleUpdateAdmin, sessionEmail]);
 
   return (
     <PortalShell
@@ -143,18 +303,16 @@ export function AdminSettingsPortal({
       {(isCreatingAdmin || Boolean(busyAdminEmail)) && (
         <LoadingOverlay
           title={isCreatingAdmin ? "Adding admin" : "Updating admin access"}
-          message={isCreatingAdmin
-            ? "Saving the new admin account."
-            : "Applying admin access changes."}
+          message={isCreatingAdmin ? "Saving the new admin account." : "Applying admin access changes."}
         />
       )}
-      <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+      <div className="space-y-4">
         <section className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-6 shadow-[var(--shadow-soft)]">
           <h2 className="text-xl font-semibold text-[var(--color-ink)]">Add another admin</h2>
           <p className="mt-2 text-sm text-[var(--color-muted)]">
             Existing admins can grant admin access directly from this page.
           </p>
-          <form className="mt-5 grid gap-3" onSubmit={handleCreateAdmin}>
+          <form className="mt-5 grid gap-3 md:grid-cols-[1fr_auto]" onSubmit={handleCreateAdmin}>
             <input
               value={adminEmail}
               onChange={(event) => setAdminEmail(event.target.value)}
@@ -164,76 +322,69 @@ export function AdminSettingsPortal({
             <button
               type="submit"
               disabled={isCreatingAdmin}
-              className="h-12 rounded-2xl bg-[var(--color-sidebar-accent)] px-4 text-sm font-medium text-[var(--color-sidebar-accent-ink)] disabled:opacity-70"
+              className="h-12 rounded-2xl bg-[var(--color-sidebar-accent)] px-5 text-sm font-medium text-[var(--color-sidebar-accent-ink)] disabled:opacity-70"
             >
               {isCreatingAdmin ? "Adding..." : "Add Admin"}
             </button>
           </form>
         </section>
 
-        <section className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-6 shadow-[var(--shadow-soft)]">
-          <h2 className="text-xl font-semibold text-[var(--color-ink)]">Current admins</h2>
-          <div className="mt-5 space-y-3">
-            {admins.map((admin) => (
-              <div key={admin.email} className="rounded-[24px] border border-[var(--color-border)] bg-white p-4">
-                {editingEmail === admin.email ? (
-                  <div className="space-y-3">
-                    <input
-                      value={editedEmail}
-                      onChange={(event) => setEditedEmail(event.target.value)}
-                      placeholder="admin@example.com"
-                      className="h-12 w-full rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm outline-none focus:border-[var(--color-brand)] focus:ring-4 focus:ring-[rgba(165,235,46,0.16)]"
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateAdmin(admin.email)}
-                        disabled={busyAdminEmail === admin.email}
-                        className="theme-btn-primary rounded-2xl px-4 py-2 text-sm font-medium disabled:opacity-70"
-                      >
-                        {busyAdminEmail === admin.email ? "Saving..." : "Save"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={cancelEditingAdmin}
-                        disabled={busyAdminEmail === admin.email}
-                        className="rounded-2xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-ink)] disabled:opacity-70"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="font-medium text-[var(--color-ink)]">{admin.email}</div>
-                    <div className="mt-1 text-xs text-[var(--color-muted)]">
-                      Added by {admin.createdBy} on {new Date(admin.createdAt).toLocaleString()}
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => startEditingAdmin(admin.email)}
-                        disabled={busyAdminEmail === admin.email}
-                        className="rounded-2xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-ink)] disabled:opacity-70"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPendingDeleteAdminEmail(admin.email)}
-                        disabled={busyAdminEmail === admin.email || admin.email === sessionEmail}
-                        className="rounded-2xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-ink)] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {busyAdminEmail === admin.email ? "Deleting..." : admin.email === sessionEmail ? "Cannot Delete Self" : "Delete"}
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
+        <section className="space-y-4">
+          <div className="grid gap-3 rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-5 shadow-[var(--shadow-soft)]">
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search by admin email or creator"
+              className="h-12 rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand)]"
+            />
           </div>
+
+          <div className="flex justify-end">
+            <AdminViewModeToggle value={viewMode} onChange={setViewMode} />
+          </div>
+
+          {viewMode === "table" ? (
+            <AdminDataTable
+              data={items}
+              columns={columns}
+              isLoading={isLoading}
+              emptyMessage="No admins match the current search."
+              pageIndex={pageIndex}
+              canPreviousPage={canPreviousPage}
+              canNextPage={canNextPage}
+              onPreviousPage={goToPreviousPage}
+              onNextPage={goToNextPage}
+            />
+          ) : (
+            <>
+              <AdminAccountsCardView
+                items={cardItems}
+                sessionEmail={sessionEmail}
+                editingEmail={editingEmail}
+                editedEmail={editedEmail}
+                busyAdminEmail={busyAdminEmail}
+                onEditedEmailChange={setEditedEmail}
+                onStartEdit={startEditingAdmin}
+                onCancelEdit={cancelEditingAdmin}
+                onSave={(email) => void handleUpdateAdmin(email)}
+                onDelete={setPendingDeleteAdminEmail}
+              />
+              {isCardLoading && cardItems.length === 0 ? (
+                <div className="rounded-[24px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-4 text-center text-sm text-[var(--color-muted)] shadow-[var(--shadow-soft)]">
+                  Loading admins...
+                </div>
+              ) : null}
+              <div ref={cardSentinelRef} />
+              {isCardLoadingMore ? (
+                <div className="rounded-[24px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-4 text-center text-sm text-[var(--color-muted)] shadow-[var(--shadow-soft)]">
+                  Loading more admins...
+                </div>
+              ) : null}
+            </>
+          )}
         </section>
       </div>
+
       <ConfirmDialog
         isOpen={Boolean(pendingDeleteAdminEmail)}
         title="Delete admin account?"

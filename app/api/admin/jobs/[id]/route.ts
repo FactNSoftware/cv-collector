@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { recordAdminAuditEvent } from "../../../../../lib/audit-log";
 import { requireAdminApiSession } from "../../../../../lib/auth-guards";
-import { deleteJob, upsertJob } from "../../../../../lib/jobs";
+import { deleteJob, getJobById, upsertJob } from "../../../../../lib/jobs";
 
 export const runtime = "nodejs";
 
@@ -34,6 +35,7 @@ export async function PATCH(
 
   try {
     const { id } = await context.params;
+    const existingJob = await getJobById(id);
     const body = (await request.json()) as JobPayload;
 
     if (!body.title?.trim()) {
@@ -59,6 +61,26 @@ export async function PATCH(
       isPublished: Boolean(body.isPublished),
     });
 
+    const action = existingJob && existingJob.isPublished !== job.isPublished
+      ? job.isPublished ? "job.publish" : "job.unpublish"
+      : "job.update";
+
+    await recordAdminAuditEvent({
+      actorEmail: auth.session.email,
+      action,
+      targetType: "job",
+      targetId: job.id,
+      summary: `${job.isPublished ? "Saved" : "Updated"} job ${job.code} - ${job.title}`,
+      requestMethod: request.method,
+      requestPath: new URL(request.url).pathname,
+      userAgent: request.headers.get("user-agent") ?? "",
+      details: {
+        jobCode: job.code,
+        title: job.title,
+        isPublished: job.isPublished,
+      },
+    });
+
     return NextResponse.json({
       message: "Job updated successfully.",
       item: job,
@@ -81,7 +103,21 @@ export async function DELETE(
 
   try {
     const { id } = await context.params;
+    const job = await getJobById(id);
     await deleteJob(id);
+
+    await recordAdminAuditEvent({
+      actorEmail: auth.session.email,
+      action: "job.delete",
+      targetType: "job",
+      targetId: id,
+      summary: job ? `Deleted job ${job.code} - ${job.title}` : `Deleted job ${id}`,
+      requestMethod: request.method,
+      requestPath: new URL(request.url).pathname,
+      userAgent: request.headers.get("user-agent") ?? "",
+      details: job ? { jobCode: job.code, title: job.title } : undefined,
+    });
+
     return NextResponse.json({ message: "Job deleted successfully." });
   } catch (error) {
     console.error("Failed to delete job", error);

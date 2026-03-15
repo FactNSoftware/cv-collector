@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAdminAuditEvent } from "../../../../lib/audit-log";
 import {
   createAdminAccount,
   isAdminPermissionTokenValid,
@@ -37,6 +38,17 @@ export async function POST(request: Request) {
 
     await ensureCandidateProfile(email);
     const admin = await createAdminAccount(email, createdBy);
+
+    await recordAdminAuditEvent({
+      actorEmail: createdBy || "system",
+      action: "admin.bootstrap",
+      targetType: "admin_account",
+      targetId: admin.email,
+      summary: `Bootstrapped admin access for ${admin.email}`,
+      requestMethod: request.method,
+      requestPath: new URL(request.url).pathname,
+      userAgent: request.headers.get("user-agent") ?? "",
+    });
 
     return NextResponse.json({
       message: "Admin account created successfully.",

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAdminAuditEvent } from "../../../../../lib/audit-log";
 import { requireAdminApiSession } from "../../../../../lib/auth-guards";
 import {
   deleteAdminAccount,
@@ -40,6 +41,21 @@ export async function PATCH(request: Request, context: RouteContext) {
     await ensureCandidateProfile(nextEmail);
     const item = await updateAdminAccountEmail(currentEmail, nextEmail, auth.session.email);
 
+    await recordAdminAuditEvent({
+      actorEmail: auth.session.email,
+      action: "admin.update_email",
+      targetType: "admin_account",
+      targetId: item.email,
+      summary: `Changed admin email from ${currentEmail} to ${item.email}`,
+      requestMethod: request.method,
+      requestPath: new URL(request.url).pathname,
+      userAgent: request.headers.get("user-agent") ?? "",
+      details: {
+        previousEmail: currentEmail,
+        nextEmail: item.email,
+      },
+    });
+
     return NextResponse.json({
       message: "Admin account updated successfully.",
       item,
@@ -75,6 +91,17 @@ export async function DELETE(request: Request, context: RouteContext) {
     }
 
     await deleteAdminAccount(targetEmail);
+
+    await recordAdminAuditEvent({
+      actorEmail: auth.session.email,
+      action: "admin.delete",
+      targetType: "admin_account",
+      targetId: targetEmail,
+      summary: `Removed admin access for ${targetEmail}`,
+      requestMethod: request.method,
+      requestPath: new URL(request.url).pathname,
+      userAgent: request.headers.get("user-agent") ?? "",
+    });
 
     return NextResponse.json({
       message: "Admin account deleted successfully.",

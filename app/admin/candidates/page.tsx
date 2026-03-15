@@ -1,7 +1,9 @@
 import { AdminCandidatesIndex } from "../../components/AdminCandidatesIndex";
+import { buildAdminCandidateListItems } from "../../../lib/admin-list-types";
 import { requireAdminPageSession } from "../../../lib/auth-guards";
 import { listCandidateProfiles } from "../../../lib/candidate-profile";
 import { listCvSubmissions } from "../../../lib/cv-storage";
+import { DEFAULT_PAGE_SIZE, paginateItems } from "../../../lib/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -11,22 +13,16 @@ export default async function AdminCandidatesPage() {
     listCandidateProfiles(),
     listCvSubmissions(),
   ]);
-
-  const candidates = profiles.map((profile) => {
-    const candidateSubmissions = submissions.filter((submission) => submission.email === profile.email);
-
-    return {
-      ...profile,
-      submissionCount: candidateSubmissions.length,
-      latestSubmissionAt: candidateSubmissions[0]?.submittedAt ?? null,
-      latestReviewStatus: candidateSubmissions[0]?.reviewStatus ?? null,
-    };
-  });
+  const initialPage = paginateItems(
+    buildAdminCandidateListItems(profiles, submissions),
+    DEFAULT_PAGE_SIZE,
+  );
 
   return (
     <AdminCandidatesIndex
       sessionEmail={session.email}
-      candidates={candidates}
+      initialCandidates={initialPage.items}
+      initialPageInfo={initialPage.pageInfo}
     />
   );
 }

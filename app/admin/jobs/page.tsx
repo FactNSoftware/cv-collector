@@ -1,7 +1,9 @@
 import { AdminJobsIndex } from "../../components/AdminJobsIndex";
+import { buildAdminJobListItems } from "../../../lib/admin-list-types";
 import { requireAdminPageSession } from "../../../lib/auth-guards";
 import { listJobs } from "../../../lib/jobs";
 import { listCvSubmissions } from "../../../lib/cv-storage";
+import { DEFAULT_PAGE_SIZE, paginateItems } from "../../../lib/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -11,16 +13,16 @@ export default async function AdminJobsPage() {
     listJobs(),
     listCvSubmissions(),
   ]);
-
-  const jobsWithCounts = jobs.map((job) => ({
-    ...job,
-    applicantCount: submissions.filter((submission) => submission.jobId === job.id).length,
-  }));
+  const initialPage = paginateItems(
+    buildAdminJobListItems(jobs, submissions),
+    DEFAULT_PAGE_SIZE,
+  );
 
   return (
     <AdminJobsIndex
       sessionEmail={session.email}
-      jobs={jobsWithCounts}
+      initialJobs={initialPage.items}
+      initialPageInfo={initialPage.pageInfo}
     />
   );
 }

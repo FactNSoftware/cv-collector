@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { recordAdminAuditEvent } from "../../../../../lib/audit-log";
 import { requireAdminApiSession } from "../../../../../lib/auth-guards";
 import {
+  getCvSubmissionById,
   deleteCvSubmission,
   updateCvSubmissionReview,
   type CvReviewStatus,
@@ -43,6 +45,22 @@ export async function PATCH(
       return NextResponse.json({ message: "Application not found." }, { status: 404 });
     }
 
+    await recordAdminAuditEvent({
+      actorEmail: auth.session.email,
+      action: `application.${body.reviewStatus}`,
+      targetType: "application",
+      targetId: updated.id,
+      summary: `Marked application ${updated.jobCode} for ${updated.email} as ${body.reviewStatus}`,
+      requestMethod: request.method,
+      requestPath: new URL(request.url).pathname,
+      userAgent: request.headers.get("user-agent") ?? "",
+      details: {
+        candidateEmail: updated.email,
+        jobCode: updated.jobCode,
+        reviewStatus: body.reviewStatus,
+      },
+    });
+
     return NextResponse.json({
       message: "Application updated successfully.",
       item: updated,
@@ -68,11 +86,28 @@ export async function DELETE(
 
   try {
     const { id } = await context.params;
+    const existing = await getCvSubmissionById(id);
     const deleted = await deleteCvSubmission(id);
 
     if (!deleted) {
       return NextResponse.json({ message: "Application not found." }, { status: 404 });
     }
+
+    await recordAdminAuditEvent({
+      actorEmail: auth.session.email,
+      action: "application.delete",
+      targetType: "application",
+      targetId: id,
+      summary: existing
+        ? `Deleted application ${existing.jobCode} for ${existing.email}`
+        : `Deleted application ${id}`,
+      requestMethod: request.method,
+      requestPath: new URL(request.url).pathname,
+      userAgent: request.headers.get("user-agent") ?? "",
+      details: existing
+        ? { candidateEmail: existing.email, jobCode: existing.jobCode }
+        : undefined,
+    });
 
     return NextResponse.json({ message: "Application deleted successfully." });
   } catch (error) {
