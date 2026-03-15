@@ -2,6 +2,19 @@
 
 This is a full-stack Next.js app for OTP-protected CV submission and review.
 
+## Project Policies
+
+- [License](/Users/factnsoftware/Documents/cv-collector/LICENSE)
+- [Security Policy](/Users/factnsoftware/Documents/cv-collector/SECURITY.md)
+- [Contributing Guide](/Users/factnsoftware/Documents/cv-collector/CONTRIBUTING.md)
+- [Code of Conduct](/Users/factnsoftware/Documents/cv-collector/CODE_OF_CONDUCT.md)
+- [Changelog](/Users/factnsoftware/Documents/cv-collector/CHANGELOG.md)
+
+## Ownership
+
+- Supun Wijegunawardhana — `wgstpwijegunawardhana@gmail.com`
+- Hirunika Withana — `hirunika.withana98@gmail.com`
+
 ## Recommended Azure Architecture
 
 For the lowest practical recurring cost on Azure, use:
