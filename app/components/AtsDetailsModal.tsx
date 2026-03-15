@@ -20,6 +20,23 @@ const getMethodLabel = (method: CvSubmissionRecord["atsMethod"]) => {
   return "Not configured";
 };
 
+const getBandLabel = (band: CvSubmissionRecord["atsDecisionBand"]) => {
+  switch (band) {
+    case "best_match":
+      return "Best match";
+    case "strong_match":
+      return "Strong match";
+    case "qualified":
+      return "Qualified";
+    case "needs_review":
+      return "Needs review";
+    case "low_match":
+      return "Low match";
+    default:
+      return "Not scored";
+  }
+};
+
 const getStatusBadge = (submission: CvSubmissionRecord) => {
   if (submission.atsStatus === "queued") {
     return <span className="rounded-full bg-sky-100 px-3 py-1.5 text-sm font-semibold text-sky-800">ATS queued</span>;
@@ -96,9 +113,17 @@ export function AtsDetailsModal({
           <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700">
             {getMethodLabel(submission.atsMethod)}
           </span>
+          <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700">
+            {getBandLabel(submission.atsDecisionBand)}
+          </span>
           {submission.atsYearsOfExperience !== null ? (
             <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700">
               {submission.atsYearsOfExperience} years
+            </span>
+          ) : null}
+          {submission.atsConfidenceScore !== null ? (
+            <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700">
+              Confidence {submission.atsConfidenceScore}%
             </span>
           ) : null}
         </div>
@@ -115,6 +140,34 @@ export function AtsDetailsModal({
               </p>
               {submission.atsCandidateSummary ? <p>{submission.atsCandidateSummary}</p> : null}
               {submission.atsConfidenceNotes ? <p>{submission.atsConfidenceNotes}</p> : null}
+              {(submission.atsExperienceRequirementMet !== null || submission.atsEducationRequirementMet !== null || submission.atsCertificationRequirementMet !== null) ? (
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {submission.atsExperienceRequirementMet !== null ? (
+                    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel)] px-3 py-2">
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Experience requirement</p>
+                      <p className="mt-1 font-medium text-slate-900">
+                        {submission.atsExperienceRequirementMet ? "Met" : "Not met"}
+                      </p>
+                    </div>
+                  ) : null}
+                  {submission.atsEducationRequirementMet !== null ? (
+                    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel)] px-3 py-2">
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Education requirement</p>
+                      <p className="mt-1 font-medium text-slate-900">
+                        {submission.atsEducationRequirementMet ? "Met" : "Not met"}
+                      </p>
+                    </div>
+                  ) : null}
+                  {submission.atsCertificationRequirementMet !== null ? (
+                    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel)] px-3 py-2">
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Certification requirement</p>
+                      <p className="mt-1 font-medium text-slate-900">
+                        {submission.atsCertificationRequirementMet ? "Met" : "Not met"}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               {submission.atsNormalizedSkills.length > 0 ? (
                 <p><span className="font-medium text-slate-900">Skills:</span> {submission.atsNormalizedSkills.join(", ")}</p>
               ) : null}
@@ -123,6 +176,15 @@ export function AtsDetailsModal({
               ) : null}
               {submission.atsEducation.length > 0 ? (
                 <p><span className="font-medium text-slate-900">Education:</span> {submission.atsEducation.join(", ")}</p>
+              ) : null}
+              {submission.atsCertifications.length > 0 ? (
+                <p><span className="font-medium text-slate-900">Certifications:</span> {submission.atsCertifications.join(", ")}</p>
+              ) : null}
+              {submission.atsDomains.length > 0 ? (
+                <p><span className="font-medium text-slate-900">Domains:</span> {submission.atsDomains.join(", ")}</p>
+              ) : null}
+              {submission.atsSeniority ? (
+                <p><span className="font-medium text-slate-900">Seniority:</span> {submission.atsSeniority}</p>
               ) : null}
               {submission.atsRequiredMatched.length > 0 ? (
                 <p><span className="font-medium text-slate-900">Matched required:</span> {submission.atsRequiredMatched.join(", ")}</p>

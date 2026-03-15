@@ -21,6 +21,9 @@ export type JobPreviewDraft = {
   atsEnabled: boolean;
   atsRequiredKeywords: string;
   atsPreferredKeywords: string;
+  atsMinimumYearsExperience: string;
+  atsRequiredEducation: string;
+  atsRequiredCertifications: string;
   closingDate: string;
   requirements: string;
   benefits: string;
@@ -64,6 +67,21 @@ export const mergeJobPreviewDraft = (
       : [],
     atsPreferredKeywords: draft.atsEnabled
       ? draft.atsPreferredKeywords
+        .split(/\r?\n|,/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+      : [],
+    atsMinimumYearsExperience: draft.atsEnabled
+      ? Math.max(0, Number.parseInt(draft.atsMinimumYearsExperience, 10) || 0)
+      : null,
+    atsRequiredEducation: draft.atsEnabled
+      ? draft.atsRequiredEducation
+        .split(/\r?\n|,/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+      : [],
+    atsRequiredCertifications: draft.atsEnabled
+      ? draft.atsRequiredCertifications
         .split(/\r?\n|,/)
         .map((item) => item.trim())
         .filter(Boolean)

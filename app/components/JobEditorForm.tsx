@@ -43,6 +43,9 @@ const EMPTY_JOB_FORM: JobFormState = {
   atsEnabled: false,
   atsRequiredKeywords: "",
   atsPreferredKeywords: "",
+  atsMinimumYearsExperience: "0",
+  atsRequiredEducation: "",
+  atsRequiredCertifications: "",
   closingDate: "",
   requirements: "",
   benefits: "",
@@ -65,6 +68,9 @@ const toJobFormState = (job: JobRecord): JobFormState => ({
   atsEnabled: job.atsEnabled,
   atsRequiredKeywords: job.atsRequiredKeywords.join("\n"),
   atsPreferredKeywords: job.atsPreferredKeywords.join("\n"),
+  atsMinimumYearsExperience: String(job.atsMinimumYearsExperience ?? 0),
+  atsRequiredEducation: job.atsRequiredEducation.join("\n"),
+  atsRequiredCertifications: job.atsRequiredCertifications.join("\n"),
   closingDate: job.closingDate,
   requirements: job.requirements,
   benefits: job.benefits,
@@ -108,6 +114,9 @@ export function JobEditorForm({
             atsEnabled: Boolean(jobForm.atsEnabled),
             atsRequiredKeywords: jobForm.atsRequiredKeywords,
             atsPreferredKeywords: jobForm.atsPreferredKeywords,
+            atsMinimumYearsExperience: Math.max(0, Number(jobForm.atsMinimumYearsExperience) || 0),
+            atsRequiredEducation: jobForm.atsRequiredEducation,
+            atsRequiredCertifications: jobForm.atsRequiredCertifications,
           }),
         },
       );
@@ -327,6 +336,9 @@ export function JobEditorForm({
                     atsEnabled: event.target.checked,
                     atsRequiredKeywords: event.target.checked ? current.atsRequiredKeywords : "",
                     atsPreferredKeywords: event.target.checked ? current.atsPreferredKeywords : "",
+                    atsMinimumYearsExperience: event.target.checked ? current.atsMinimumYearsExperience : "0",
+                    atsRequiredEducation: event.target.checked ? current.atsRequiredEducation : "",
+                    atsRequiredCertifications: event.target.checked ? current.atsRequiredCertifications : "",
                   }))}
                 />
                 Enable ATS analysis for this job
@@ -355,6 +367,41 @@ export function JobEditorForm({
                       placeholder={"Optional bonus keywords.\nExample:\nAzure\nCI/CD\nFigma"}
                       className="w-full rounded-xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]"
                     />
+                  </label>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-semibold text-slate-800">Minimum years</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={jobForm.atsMinimumYearsExperience}
+                        onChange={(event) => setJobForm((current) => ({ ...current, atsMinimumYearsExperience: event.target.value }))}
+                        className="h-12 w-full rounded-xl border border-[var(--color-border)] bg-white px-4 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]"
+                      />
+                    </label>
+                    <label className="block md:col-span-2">
+                      <span className="mb-2 block text-sm font-semibold text-slate-800">Required education</span>
+                      <textarea
+                        value={jobForm.atsRequiredEducation}
+                        onChange={(event) => setJobForm((current) => ({ ...current, atsRequiredEducation: event.target.value }))}
+                        rows={3}
+                        placeholder={"One required education signal per line.\nExample:\nBSc Computer Science\nSoftware Engineering degree"}
+                        className="w-full rounded-xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]"
+                      />
+                    </label>
+                  </div>
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-semibold text-slate-800">Required certifications</span>
+                    <textarea
+                      value={jobForm.atsRequiredCertifications}
+                      onChange={(event) => setJobForm((current) => ({ ...current, atsRequiredCertifications: event.target.value }))}
+                      rows={3}
+                      placeholder={"One required certification per line.\nExample:\nAWS Cloud Practitioner\nScrum Master"}
+                      className="w-full rounded-xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]"
+                    />
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      These requirements are stored separately so admins can review missing hard signals clearly.
+                    </p>
                   </label>
                 </>
               ) : (

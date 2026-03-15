@@ -48,6 +48,99 @@ This is cheaper than the previous App Service + Cosmos DB approach for a small o
 
 If `OPENAI_API_KEY` is configured, CV submissions use AI-assisted ATS extraction on the backend and store a structured scoring result for admin review. If it is not configured, the app falls back to rules-based keyword matching so submissions still work.
 
+## Authentication And Session Flow
+
+The app uses email OTP authentication with server-side sessions.
+
+### Login Flow
+
+1. user submits an email address from the login screen
+2. the backend generates a `6-digit` OTP
+3. the OTP is emailed through Azure Communication Services Email
+4. the OTP record is stored in Azure Table Storage
+5. user submits the OTP
+6. backend verifies the OTP and creates a session
+7. the browser receives an authenticated cookie and is redirected into the correct portal
+
+### OTP Storage And Validation
+
+OTP records are stored in Azure Table Storage and include:
+
+- normalized email
+- hashed OTP code
+- created time
+- expiry time
+- failed-attempt counter
+
+Current OTP rules:
+
+- OTP length: `6 digits`
+- OTP expiry: `5 minutes`
+- maximum verify attempts per issued OTP: `5`
+
+The OTP itself is not stored in plain text. It is hashed with the email and `AUTH_SECRET`.
+
+### Session Storage
+
+Sessions are server-side.
+
+- the browser stores only the raw session token in the `cv_session` cookie
+- the backend hashes that token with `AUTH_SECRET`
+- the hashed token is stored in Azure Table Storage with:
+  - email
+  - created time
+  - expiry time
+
+If a session record is missing, malformed, or expired, it is treated as invalid and removed.
+
+### Session Cookie
+
+The authenticated cookie is:
+
+- name: `cv_session`
+- `httpOnly`
+- `sameSite: lax`
+- `secure` in production
+- path: `/`
+
+This means browser JavaScript cannot read the session token directly.
+
+### Session Lifetime
+
+Current session lifetime is:
+
+- `12 hours`
+
+This is controlled in [auth-session.ts](/Users/factnsoftware/Documents/cv-collector/lib/auth-session.ts).
+
+### Authorization Model
+
+There is one shared login system for both candidates and admins.
+
+After authentication:
+
+- candidate access uses a normal authenticated session
+- admin access uses the same session plus an admin-email check
+
+Authorization helpers are implemented in [auth-guards.ts](/Users/factnsoftware/Documents/cv-collector/lib/auth-guards.ts).
+
+Behavior:
+
+- unauthenticated users are redirected to `/`
+- authenticated admins are redirected to `/admin`
+- authenticated candidates are redirected to `/applications`
+- candidates cannot access admin routes
+- non-admin users receive `403` on admin APIs
+
+### Logout
+
+Logout does two things:
+
+1. deletes the server-side session record from Azure Table Storage
+2. clears the `cv_session` cookie in the browser
+
+Logout is implemented in [route.ts](/Users/factnsoftware/Documents/cv-collector/app/api/auth/logout/route.ts).
+
 ## ATS Functionality
 
 The app includes an optional ATS analysis pipeline for each job. ATS is configured per job, runs on the backend, stores its result with the application record, and is shown in the admin review experience.

@@ -50,6 +50,40 @@ const renderAtsBadge = (submission: Pick<CvSubmissionRecord, "atsStatus" | "atsS
   return <span className="text-xs text-[var(--color-muted)]">Not scored</span>;
 };
 
+const getDecisionBandLabel = (band: CvSubmissionRecord["atsDecisionBand"]) => {
+  switch (band) {
+    case "best_match":
+      return "Best match";
+    case "strong_match":
+      return "Strong match";
+    case "qualified":
+      return "Qualified";
+    case "needs_review":
+      return "Needs review";
+    case "low_match":
+      return "Low match";
+    default:
+      return "Not scored";
+  }
+};
+
+const getDecisionBandTone = (band: CvSubmissionRecord["atsDecisionBand"]) => {
+  switch (band) {
+    case "best_match":
+      return "bg-emerald-100 text-emerald-800";
+    case "strong_match":
+      return "bg-sky-100 text-sky-800";
+    case "qualified":
+      return "bg-amber-100 text-amber-800";
+    case "needs_review":
+      return "bg-slate-200 text-slate-700";
+    case "low_match":
+      return "bg-rose-100 text-rose-800";
+    default:
+      return "bg-slate-100 text-slate-600";
+  }
+};
+
 type AdminJobCandidatesProps = {
   sessionEmail: string;
   job: JobRecord;
@@ -62,6 +96,7 @@ export function AdminJobCandidates({
   submissions,
 }: AdminJobCandidatesProps) {
   type AtsFilterValue = "all" | "80_plus" | "60_79" | "40_59" | "below_40" | "not_scored";
+  type FitFilterValue = "all" | "best_match" | "strong_match" | "qualified" | "needs_review" | "low_match";
   type ReviewFilterValue = "all" | "pending" | "accepted" | "rejected";
 
   const router = useRouter();
@@ -69,6 +104,7 @@ export function AdminJobCandidates({
   const [tablePageIndex, setTablePageIndex] = useState(0);
   const [tablePageSize, setTablePageSize] = useState(10);
   const [atsFilter, setAtsFilter] = useState<AtsFilterValue>("all");
+  const [fitFilter, setFitFilter] = useState<FitFilterValue>("all");
   const [reviewFilter, setReviewFilter] = useState<ReviewFilterValue>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [recalculatingAtsId, setRecalculatingAtsId] = useState<string | null>(null);
@@ -121,6 +157,12 @@ export function AdminJobCandidates({
           item.email,
           item.phone,
           item.resumeOriginalName,
+          item.atsNormalizedSkills.join(" "),
+          item.atsRelevantRoles.join(" "),
+          item.atsEducation.join(" "),
+          item.atsCertifications.join(" "),
+          item.atsDomains.join(" "),
+          item.atsSeniority,
         ]
           .filter(Boolean)
           .join(" ")
@@ -136,6 +178,9 @@ export function AdminJobCandidates({
       }
 
       if (!job.atsEnabled || atsFilter === "all") {
+        if (fitFilter !== "all") {
+          return item.atsDecisionBand === fitFilter;
+        }
         return true;
       }
 
@@ -159,8 +204,14 @@ export function AdminJobCandidates({
         return item.atsScore >= 40 && item.atsScore <= 59;
       }
 
-      return item.atsScore < 40;
-    });
+      const atsMatches = item.atsScore < 40;
+
+      if (!atsMatches) {
+        return false;
+      }
+
+      return fitFilter === "all" ? true : item.atsDecisionBand === fitFilter;
+    }).filter((item) => fitFilter === "all" || item.atsDecisionBand === fitFilter);
 
     return [...filteredItems].sort((left, right) => {
       if (job.atsEnabled) {
@@ -173,21 +224,15 @@ export function AdminJobCandidates({
 
       return new Date(right.submittedAt).getTime() - new Date(left.submittedAt).getTime();
     });
-  }, [atsFilter, items, job.atsEnabled, reviewFilter, searchQuery]);
+  }, [atsFilter, fitFilter, items, job.atsEnabled, reviewFilter, searchQuery]);
 
   const rankedItems = useMemo(() => {
     return visibleItems.map((item, index) => ({
       ...item,
       ranking: index + 1,
-      rankingLabel: !job.atsEnabled || item.atsScore === null
+      rankingLabel: !job.atsEnabled || item.atsDecisionBand === "not_scored"
         ? null
-        : index === 0
-          ? "Best match"
-          : item.atsScore >= 80
-            ? "Strong match"
-            : item.atsScore >= 60
-              ? "Qualified"
-              : "Needs review",
+        : getDecisionBandLabel(item.atsDecisionBand),
     }));
   }, [job.atsEnabled, visibleItems]);
 
@@ -310,15 +355,7 @@ export function AdminJobCandidates({
         <div className="space-y-1">
           <div className="text-sm font-semibold text-[var(--color-ink)]">#{row.original.ranking}</div>
           {row.original.rankingLabel ? (
-            <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${
-              row.original.ranking === 1
-                ? "bg-emerald-100 text-emerald-800"
-                : row.original.atsScore !== null && row.original.atsScore >= 80
-                  ? "bg-sky-100 text-sky-800"
-                  : row.original.atsScore !== null && row.original.atsScore >= 60
-                    ? "bg-amber-100 text-amber-800"
-                    : "bg-slate-200 text-slate-700"
-            }`}>
+            <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${getDecisionBandTone(row.original.atsDecisionBand)}`}>
               {row.original.rankingLabel}
             </span>
           ) : null}
@@ -533,6 +570,23 @@ export function AdminJobCandidates({
                     <option value="not_scored">ATS not scored</option>
                   </select>
                 ) : null}
+                {job.atsEnabled ? (
+                  <select
+                    value={fitFilter}
+                    onChange={(event) => {
+                      setFitFilter(event.target.value as FitFilterValue);
+                      setTablePageIndex(0);
+                    }}
+                    className="h-11 min-w-[150px] rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand)]"
+                  >
+                    <option value="all">All fit bands</option>
+                    <option value="best_match">Best match</option>
+                    <option value="strong_match">Strong match</option>
+                    <option value="qualified">Qualified</option>
+                    <option value="needs_review">Needs review</option>
+                    <option value="low_match">Low match</option>
+                  </select>
+                ) : null}
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
                 <button
@@ -595,15 +649,7 @@ export function AdminJobCandidates({
                           Rank #{submission.ranking}
                         </span>
                         {submission.rankingLabel ? (
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                            submission.ranking === 1
-                              ? "bg-emerald-100 text-emerald-800"
-                              : submission.atsScore !== null && submission.atsScore >= 80
-                                ? "bg-sky-100 text-sky-800"
-                                : submission.atsScore !== null && submission.atsScore >= 60
-                                  ? "bg-amber-100 text-amber-800"
-                                  : "bg-slate-200 text-slate-700"
-                          }`}>
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getDecisionBandTone(submission.atsDecisionBand)}`}>
                             {submission.rankingLabel}
                           </span>
                         ) : null}

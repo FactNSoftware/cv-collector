@@ -63,6 +63,9 @@ type JobEntity = {
   atsEnabled?: boolean;
   atsRequiredKeywordsJson?: string;
   atsPreferredKeywordsJson?: string;
+  atsMinimumYearsExperience?: number;
+  atsRequiredEducationJson?: string;
+  atsRequiredCertificationsJson?: string;
   closingDate?: string;
   requirements?: string;
   benefits?: string;
@@ -89,6 +92,9 @@ export type JobRecord = {
   atsEnabled: boolean;
   atsRequiredKeywords: string[];
   atsPreferredKeywords: string[];
+  atsMinimumYearsExperience: number | null;
+  atsRequiredEducation: string[];
+  atsRequiredCertifications: string[];
   closingDate: string;
   requirements: string;
   benefits: string;
@@ -119,6 +125,9 @@ export type UpsertJobInput = {
   atsEnabled?: boolean;
   atsRequiredKeywords?: string[];
   atsPreferredKeywords?: string[];
+  atsMinimumYearsExperience?: number | null;
+  atsRequiredEducation?: string[];
+  atsRequiredCertifications?: string[];
   closingDate?: string;
   requirements?: string;
   benefits?: string;
@@ -207,6 +216,14 @@ const normalizeMaxRetryAttempts = (value: number | null | undefined) => {
   return Math.floor(value);
 };
 
+const normalizeMinimumYearsExperience = (value: number | null | undefined) => {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+
+  return Math.floor(value);
+};
+
 const parseKeywordJson = (value: string | undefined) => {
   if (!value) {
     return [] as string[];
@@ -254,6 +271,9 @@ const toJobRecord = (entity: JobEntity): JobRecord => {
     atsEnabled: Boolean(entity.atsEnabled),
     atsRequiredKeywords: parseKeywordJson(entity.atsRequiredKeywordsJson),
     atsPreferredKeywords: parseKeywordJson(entity.atsPreferredKeywordsJson),
+    atsMinimumYearsExperience: normalizeMinimumYearsExperience(entity.atsMinimumYearsExperience),
+    atsRequiredEducation: parseKeywordJson(entity.atsRequiredEducationJson),
+    atsRequiredCertifications: parseKeywordJson(entity.atsRequiredCertificationsJson),
     closingDate: normalizeText(entity.closingDate),
     requirements: normalizeText(entity.requirements),
     benefits: normalizeText(entity.benefits),
@@ -283,6 +303,9 @@ export const getJobAtsConfigSignature = (
     | "atsEnabled"
     | "atsRequiredKeywords"
     | "atsPreferredKeywords"
+    | "atsMinimumYearsExperience"
+    | "atsRequiredEducation"
+    | "atsRequiredCertifications"
     | "title"
     | "summary"
     | "requirements"
@@ -298,6 +321,9 @@ export const getJobAtsConfigSignature = (
     atsEnabled: job.atsEnabled,
     required: [...job.atsRequiredKeywords].sort((left, right) => left.localeCompare(right)),
     preferred: [...job.atsPreferredKeywords].sort((left, right) => left.localeCompare(right)),
+    minimumYearsExperience: job.atsMinimumYearsExperience ?? null,
+    requiredEducation: [...job.atsRequiredEducation].sort((left, right) => left.localeCompare(right)),
+    requiredCertifications: [...job.atsRequiredCertifications].sort((left, right) => left.localeCompare(right)),
     title: job.title,
     summary: job.summary,
     requirements: job.requirements,
@@ -420,6 +446,11 @@ export const upsertJob = async (input: UpsertJobInput): Promise<JobRecord> => {
     atsEnabled: Boolean(input.atsEnabled),
     atsRequiredKeywordsJson: JSON.stringify(input.atsEnabled ? (input.atsRequiredKeywords ?? []) : []),
     atsPreferredKeywordsJson: JSON.stringify(input.atsEnabled ? (input.atsPreferredKeywords ?? []) : []),
+    atsMinimumYearsExperience: input.atsEnabled
+      ? normalizeMinimumYearsExperience(input.atsMinimumYearsExperience) ?? undefined
+      : undefined,
+    atsRequiredEducationJson: JSON.stringify(input.atsEnabled ? (input.atsRequiredEducation ?? []) : []),
+    atsRequiredCertificationsJson: JSON.stringify(input.atsEnabled ? (input.atsRequiredCertifications ?? []) : []),
     closingDate: normalizeText(input.closingDate),
     requirements: normalizeText(input.requirements),
     benefits: normalizeText(input.benefits),

@@ -43,6 +43,7 @@ export type CvSubmissionRecord = {
   atsConfigSignature: string;
   atsScore: number | null;
   atsMethod: "ai" | "rules" | "none";
+  atsDecisionBand: "best_match" | "strong_match" | "qualified" | "needs_review" | "low_match" | "not_scored";
   atsSummary: string;
   atsCandidateSummary: string;
   atsConfidenceNotes: string;
@@ -50,7 +51,14 @@ export type CvSubmissionRecord = {
   atsNormalizedSkills: string[];
   atsRelevantRoles: string[];
   atsEducation: string[];
+  atsCertifications: string[];
+  atsDomains: string[];
+  atsSeniority: string;
+  atsConfidenceScore: number | null;
   atsYearsOfExperience: number | null;
+  atsExperienceRequirementMet: boolean | null;
+  atsEducationRequirementMet: boolean | null;
+  atsCertificationRequirementMet: boolean | null;
   atsRequiredMatched: string[];
   atsRequiredMissing: string[];
   atsPreferredMatched: string[];
@@ -137,6 +145,7 @@ type CvSubmissionDocument = {
   atsConfigSignature?: string;
   atsScore?: number;
   atsMethod?: string;
+  atsDecisionBand?: string;
   atsSummary?: string;
   atsCandidateSummary?: string;
   atsConfidenceNotes?: string;
@@ -144,7 +153,14 @@ type CvSubmissionDocument = {
   atsNormalizedSkillsJson?: string;
   atsRelevantRolesJson?: string;
   atsEducationJson?: string;
+  atsCertificationsJson?: string;
+  atsDomainsJson?: string;
+  atsSeniority?: string;
+  atsConfidenceScore?: number;
   atsYearsOfExperience?: number;
+  atsExperienceRequirementMet?: boolean;
+  atsEducationRequirementMet?: boolean;
+  atsCertificationRequirementMet?: boolean;
   atsRequiredMatchedJson?: string;
   atsRequiredMissingJson?: string;
   atsPreferredMatchedJson?: string;
@@ -241,6 +257,13 @@ const toRecord = (submission: CvSubmissionDocument): CvSubmissionRecord => {
     atsMethod: submission.atsMethod === "ai" || submission.atsMethod === "rules" || submission.atsMethod === "none"
       ? submission.atsMethod
       : "none",
+    atsDecisionBand: submission.atsDecisionBand === "best_match"
+      || submission.atsDecisionBand === "strong_match"
+      || submission.atsDecisionBand === "qualified"
+      || submission.atsDecisionBand === "needs_review"
+      || submission.atsDecisionBand === "low_match"
+      ? submission.atsDecisionBand
+      : "not_scored",
     atsSummary: normalizeStoredAtsSummary(submission.atsSummary ?? "", atsScore),
     atsCandidateSummary: submission.atsCandidateSummary ?? "",
     atsConfidenceNotes: submission.atsConfidenceNotes ?? "",
@@ -248,7 +271,20 @@ const toRecord = (submission: CvSubmissionDocument): CvSubmissionRecord => {
     atsNormalizedSkills: parseStringArray(submission.atsNormalizedSkillsJson),
     atsRelevantRoles: parseStringArray(submission.atsRelevantRolesJson),
     atsEducation: parseStringArray(submission.atsEducationJson),
+    atsCertifications: parseStringArray(submission.atsCertificationsJson),
+    atsDomains: parseStringArray(submission.atsDomainsJson),
+    atsSeniority: submission.atsSeniority ?? "",
+    atsConfidenceScore: toNullableFiniteNumber(submission.atsConfidenceScore),
     atsYearsOfExperience: toNullableFiniteNumber(submission.atsYearsOfExperience),
+    atsExperienceRequirementMet: typeof submission.atsExperienceRequirementMet === "boolean"
+      ? submission.atsExperienceRequirementMet
+      : null,
+    atsEducationRequirementMet: typeof submission.atsEducationRequirementMet === "boolean"
+      ? submission.atsEducationRequirementMet
+      : null,
+    atsCertificationRequirementMet: typeof submission.atsCertificationRequirementMet === "boolean"
+      ? submission.atsCertificationRequirementMet
+      : null,
     atsRequiredMatched: parseStringArray(submission.atsRequiredMatchedJson),
     atsRequiredMissing: parseStringArray(submission.atsRequiredMissingJson),
     atsPreferredMatched: parseStringArray(submission.atsPreferredMatchedJson),
@@ -295,6 +331,7 @@ const toSubmissionDoc = (
     atsConfigSignature: String(data.atsConfigSignature ?? ""),
     atsScore: toOptionalFiniteNumber(data.atsScore),
     atsMethod: String(data.atsMethod ?? "none"),
+    atsDecisionBand: String(data.atsDecisionBand ?? "not_scored"),
     atsSummary: String(data.atsSummary ?? ""),
     atsCandidateSummary: String(data.atsCandidateSummary ?? ""),
     atsConfidenceNotes: String(data.atsConfidenceNotes ?? ""),
@@ -302,7 +339,14 @@ const toSubmissionDoc = (
     atsNormalizedSkillsJson: String(data.atsNormalizedSkillsJson ?? "[]"),
     atsRelevantRolesJson: String(data.atsRelevantRolesJson ?? "[]"),
     atsEducationJson: String(data.atsEducationJson ?? "[]"),
+    atsCertificationsJson: String(data.atsCertificationsJson ?? "[]"),
+    atsDomainsJson: String(data.atsDomainsJson ?? "[]"),
+    atsSeniority: String(data.atsSeniority ?? ""),
+    atsConfidenceScore: toOptionalFiniteNumber(data.atsConfidenceScore),
     atsYearsOfExperience: toOptionalFiniteNumber(data.atsYearsOfExperience),
+    atsExperienceRequirementMet: typeof data.atsExperienceRequirementMet === "boolean" ? data.atsExperienceRequirementMet : undefined,
+    atsEducationRequirementMet: typeof data.atsEducationRequirementMet === "boolean" ? data.atsEducationRequirementMet : undefined,
+    atsCertificationRequirementMet: typeof data.atsCertificationRequirementMet === "boolean" ? data.atsCertificationRequirementMet : undefined,
     atsRequiredMatchedJson: String(data.atsRequiredMatchedJson ?? "[]"),
     atsRequiredMissingJson: String(data.atsRequiredMissingJson ?? "[]"),
     atsPreferredMatchedJson: String(data.atsPreferredMatchedJson ?? "[]"),
@@ -336,6 +380,7 @@ const getQueuedAtsEntityFields = (atsEnabled: boolean) => ({
   atsStatus: atsEnabled ? "queued" : "none",
   atsScore: undefined,
   atsMethod: "none",
+  atsDecisionBand: "not_scored",
   atsSummary: atsEnabled
     ? "ATS analysis is queued and will run in the background."
     : "ATS is not configured for this job.",
@@ -345,7 +390,14 @@ const getQueuedAtsEntityFields = (atsEnabled: boolean) => ({
   atsNormalizedSkillsJson: "[]",
   atsRelevantRolesJson: "[]",
   atsEducationJson: "[]",
+  atsCertificationsJson: "[]",
+  atsDomainsJson: "[]",
+  atsSeniority: "",
+  atsConfidenceScore: undefined,
   atsYearsOfExperience: undefined,
+  atsExperienceRequirementMet: undefined,
+  atsEducationRequirementMet: undefined,
+  atsCertificationRequirementMet: undefined,
   atsRequiredMatchedJson: "[]",
   atsRequiredMissingJson: "[]",
   atsPreferredMatchedJson: "[]",
@@ -357,6 +409,7 @@ const getAtsEntityFields = (evaluation: AtsEvaluation) => ({
   atsStatus: getAtsStatusFromEvaluation(evaluation),
   atsScore: evaluation.score ?? undefined,
   atsMethod: evaluation.method,
+  atsDecisionBand: evaluation.decisionBand,
   atsSummary: evaluation.summary,
   atsCandidateSummary: evaluation.candidateSummary,
   atsConfidenceNotes: evaluation.confidenceNotes,
@@ -364,7 +417,14 @@ const getAtsEntityFields = (evaluation: AtsEvaluation) => ({
   atsNormalizedSkillsJson: JSON.stringify(evaluation.normalizedSkills),
   atsRelevantRolesJson: JSON.stringify(evaluation.relevantRoles),
   atsEducationJson: JSON.stringify(evaluation.education),
+  atsCertificationsJson: JSON.stringify(evaluation.certifications),
+  atsDomainsJson: JSON.stringify(evaluation.domains),
+  atsSeniority: evaluation.seniority,
+  atsConfidenceScore: evaluation.confidenceScore ?? undefined,
   atsYearsOfExperience: evaluation.yearsOfExperience ?? undefined,
+  atsExperienceRequirementMet: evaluation.experienceRequirementMet ?? undefined,
+  atsEducationRequirementMet: evaluation.educationRequirementMet ?? undefined,
+  atsCertificationRequirementMet: evaluation.certificationRequirementMet ?? undefined,
   atsRequiredMatchedJson: JSON.stringify(evaluation.requiredMatched),
   atsRequiredMissingJson: JSON.stringify(evaluation.requiredMissing),
   atsPreferredMatchedJson: JSON.stringify(evaluation.preferredMatched),
@@ -379,6 +439,9 @@ export const canSubmissionAtsBeRecalculated = (
     | "atsEnabled"
     | "atsRequiredKeywords"
     | "atsPreferredKeywords"
+    | "atsMinimumYearsExperience"
+    | "atsRequiredEducation"
+    | "atsRequiredCertifications"
     | "title"
     | "summary"
     | "requirements"
@@ -410,7 +473,7 @@ export const canSubmissionAtsBeRecalculated = (
     return false;
   }
 
-  return submission.atsStatus !== "success" || submission.atsConfigSignature !== currentSignature;
+  return submission.atsStatus === "failed";
 };
 
 const getMaxRejectedAttemptsForJob = async (jobId: string) => {
@@ -720,6 +783,7 @@ export const updateCvSubmissionReview = async (
     ...getAtsEntityFields({
       score: existing.atsScore,
       method: existing.atsMethod,
+      decisionBand: existing.atsDecisionBand,
       summary: existing.atsSummary,
       candidateSummary: existing.atsCandidateSummary,
       confidenceNotes: existing.atsConfidenceNotes,
@@ -727,7 +791,14 @@ export const updateCvSubmissionReview = async (
       normalizedSkills: existing.atsNormalizedSkills,
       relevantRoles: existing.atsRelevantRoles,
       education: existing.atsEducation,
+      certifications: existing.atsCertifications,
+      domains: existing.atsDomains,
+      seniority: existing.atsSeniority,
+      confidenceScore: existing.atsConfidenceScore,
       yearsOfExperience: existing.atsYearsOfExperience,
+      experienceRequirementMet: existing.atsExperienceRequirementMet,
+      educationRequirementMet: existing.atsEducationRequirementMet,
+      certificationRequirementMet: existing.atsCertificationRequirementMet,
       requiredMatched: existing.atsRequiredMatched,
       requiredMissing: existing.atsRequiredMissing,
       preferredMatched: existing.atsPreferredMatched,

@@ -33,7 +33,11 @@ const atsAnalysisSchema = z.object({
   normalizedSkills: z.array(z.string()).default([]),
   relevantRoles: z.array(z.string()).default([]),
   education: z.array(z.string()).default([]),
+  certifications: z.array(z.string()).default([]),
+  domains: z.array(z.string()).default([]),
+  seniority: z.string().default(""),
   yearsOfExperience: z.number().nullable().default(null),
+  confidenceScore: z.number().nullable().default(null),
   matchedRequiredKeywords: z.array(z.string()).default([]),
   missingRequiredKeywords: z.array(z.string()).default([]),
   matchedPreferredKeywords: z.array(z.string()).default([]),
@@ -44,6 +48,7 @@ const atsAnalysisSchema = z.object({
 export type AtsEvaluation = {
   score: number | null;
   method: "ai" | "rules" | "none";
+  decisionBand: "best_match" | "strong_match" | "qualified" | "needs_review" | "low_match" | "not_scored";
   summary: string;
   candidateSummary: string;
   confidenceNotes: string;
@@ -51,7 +56,14 @@ export type AtsEvaluation = {
   normalizedSkills: string[];
   relevantRoles: string[];
   education: string[];
+  certifications: string[];
+  domains: string[];
+  seniority: string;
+  confidenceScore: number | null;
   yearsOfExperience: number | null;
+  experienceRequirementMet: boolean | null;
+  educationRequirementMet: boolean | null;
+  certificationRequirementMet: boolean | null;
   requiredMatched: string[];
   requiredMissing: string[];
   preferredMatched: string[];
@@ -114,16 +126,6 @@ const matchKeywords = (keywords: string[], normalizedText: string) => {
   return { matched, missing };
 };
 
-const sanitizeKeywordMatches = (keywords: string[], values: string[]) => {
-  const allowed = new Map(
-    keywords.map((keyword) => [normalizeSearchText(keyword), keyword] as const),
-  );
-
-  return normalizeUniqueStrings(values)
-    .map((value) => allowed.get(normalizeSearchText(value)) ?? null)
-    .filter((value): value is string => Boolean(value));
-};
-
 const getOpenAIClient = () => {
   if (openAiClient !== undefined) {
     return openAiClient;
@@ -137,26 +139,45 @@ const getOpenAIClient = () => {
 const buildSummary = ({
   score,
   method,
+  decisionBand,
   requiredMatched,
   requiredMissing,
   preferredMatched,
   preferredMissing,
   candidateSummary,
+  experienceRequirementMet,
+  educationRequirementMet,
+  certificationRequirementMet,
 }: Pick<
   AtsEvaluation,
   | "score"
   | "method"
+  | "decisionBand"
   | "requiredMatched"
   | "requiredMissing"
   | "preferredMatched"
   | "preferredMissing"
   | "candidateSummary"
+  | "experienceRequirementMet"
+  | "educationRequirementMet"
+  | "certificationRequirementMet"
 >) => {
   if (score === null) {
     return "ATS is not configured for this job.";
   }
 
-  const base = `${score}% match. Required ${requiredMatched.length}/${requiredMatched.length + requiredMissing.length}, preferred ${preferredMatched.length}/${preferredMatched.length + preferredMissing.length}.`;
+  const checks: string[] = [];
+  if (experienceRequirementMet !== null) {
+    checks.push(`experience ${experienceRequirementMet ? "met" : "not met"}`);
+  }
+  if (educationRequirementMet !== null) {
+    checks.push(`education ${educationRequirementMet ? "met" : "not met"}`);
+  }
+  if (certificationRequirementMet !== null) {
+    checks.push(`certifications ${certificationRequirementMet ? "met" : "not met"}`);
+  }
+
+  const base = `${score}% match. ${decisionBand.replace(/_/g, " ")}. Required ${requiredMatched.length}/${requiredMatched.length + requiredMissing.length}, preferred ${preferredMatched.length}/${preferredMatched.length + preferredMissing.length}.${checks.length > 0 ? ` ${checks.join(", ")}.` : ""}`;
 
   if (!candidateSummary.trim()) {
     return method === "ai" ? `${base} AI extracted the resume successfully.` : base;
@@ -202,6 +223,7 @@ const scoreAts = ({
 const buildNoConfigEvaluation = (): AtsEvaluation => ({
   score: null,
   method: "none",
+  decisionBand: "not_scored",
   summary: "ATS is not configured for this job.",
   candidateSummary: "",
   confidenceNotes: "",
@@ -209,7 +231,14 @@ const buildNoConfigEvaluation = (): AtsEvaluation => ({
   normalizedSkills: [],
   relevantRoles: [],
   education: [],
+  certifications: [],
+  domains: [],
+  seniority: "",
+  confidenceScore: null,
   yearsOfExperience: null,
+  experienceRequirementMet: null,
+  educationRequirementMet: null,
+  certificationRequirementMet: null,
   requiredMatched: [],
   requiredMissing: [],
   preferredMatched: [],
@@ -221,24 +250,37 @@ const buildRulesEvaluation = ({
   extractedText,
   requiredKeywords,
   preferredKeywords,
+  minimumYearsExperience,
+  requiredEducation,
+  requiredCertifications,
   summaryOverride,
 }: {
   extractedText: string;
   requiredKeywords: string[];
   preferredKeywords: string[];
+  minimumYearsExperience: number | null;
+  requiredEducation: string[];
+  requiredCertifications: string[];
   summaryOverride?: string;
 }): AtsEvaluation => {
-  const normalizedText = normalizeSearchText(extractedText);
-  const required = matchKeywords(requiredKeywords, normalizedText);
-  const preferred = matchKeywords(preferredKeywords, normalizedText);
+  const deterministicSignals = getDeterministicSignals({
+    extractedText,
+    requiredKeywords,
+    preferredKeywords,
+    minimumYearsExperience,
+    requiredEducation,
+    requiredCertifications,
+  });
   const evaluation: AtsEvaluation = {
-    score: scoreAts({
-      requiredMatched: required.matched,
-      requiredMissing: required.missing,
-      preferredMatched: preferred.matched,
-      preferredMissing: preferred.missing,
-    }),
+    score: deterministicSignals.score,
     method: "rules",
+    decisionBand: getAtsDecisionBand({
+      score: deterministicSignals.score,
+      requiredMissing: deterministicSignals.requiredMissing,
+      experienceRequirementMet: deterministicSignals.experienceRequirementMet,
+      educationRequirementMet: deterministicSignals.educationRequirementMet,
+      certificationRequirementMet: deterministicSignals.certificationRequirementMet,
+    }),
     summary: "",
     candidateSummary: summaryOverride ?? "",
     confidenceNotes: "",
@@ -246,11 +288,18 @@ const buildRulesEvaluation = ({
     normalizedSkills: [],
     relevantRoles: [],
     education: [],
-    yearsOfExperience: null,
-    requiredMatched: required.matched,
-    requiredMissing: required.missing,
-    preferredMatched: preferred.matched,
-    preferredMissing: preferred.missing,
+    certifications: [],
+    domains: [],
+    seniority: "",
+    confidenceScore: null,
+    yearsOfExperience: deterministicSignals.yearsOfExperience,
+    experienceRequirementMet: deterministicSignals.experienceRequirementMet,
+    educationRequirementMet: deterministicSignals.educationRequirementMet,
+    certificationRequirementMet: deterministicSignals.certificationRequirementMet,
+    requiredMatched: deterministicSignals.requiredMatched,
+    requiredMissing: deterministicSignals.requiredMissing,
+    preferredMatched: deterministicSignals.preferredMatched,
+    preferredMissing: deterministicSignals.preferredMissing,
     evaluatedAt: new Date().toISOString(),
   };
 
@@ -259,6 +308,130 @@ const buildRulesEvaluation = ({
     summary: buildSummary(evaluation),
   };
 };
+
+const getDeterministicKeywordEvaluation = ({
+  extractedText,
+  requiredKeywords,
+  preferredKeywords,
+  minimumYearsExperience,
+  requiredEducation,
+  requiredCertifications,
+}: {
+  extractedText: string;
+  requiredKeywords: string[];
+  preferredKeywords: string[];
+  minimumYearsExperience: number | null;
+  requiredEducation: string[];
+  requiredCertifications: string[];
+}) => {
+  const normalizedText = normalizeSearchText(extractedText);
+  const required = matchKeywords(requiredKeywords, normalizedText);
+  const preferred = matchKeywords(preferredKeywords, normalizedText);
+  const education = matchKeywords(requiredEducation, normalizedText);
+  const certifications = matchKeywords(requiredCertifications, normalizedText);
+  const yearsOfExperience = detectYearsOfExperienceFromText(extractedText);
+
+  return {
+    requiredMatched: required.matched,
+    requiredMissing: required.missing,
+    preferredMatched: preferred.matched,
+    preferredMissing: preferred.missing,
+    educationMatched: education.matched,
+    educationMissing: education.missing,
+    certificationsMatched: certifications.matched,
+    certificationsMissing: certifications.missing,
+    yearsOfExperience,
+    experienceRequirementMet: minimumYearsExperience === null
+      ? null
+      : yearsOfExperience === null
+        ? false
+        : yearsOfExperience >= minimumYearsExperience,
+    educationRequirementMet: requiredEducation.length === 0 ? null : education.missing.length === 0,
+    certificationRequirementMet: requiredCertifications.length === 0 ? null : certifications.missing.length === 0,
+    score: scoreAts({
+      requiredMatched: required.matched,
+      requiredMissing: required.missing,
+      preferredMatched: preferred.matched,
+      preferredMissing: preferred.missing,
+    }),
+  };
+};
+
+const detectYearsOfExperienceFromText = (value: string) => {
+  const matches = [...value.matchAll(/(\d{1,2})\s*\+?\s*(?:years?|yrs?)/gi)]
+    .map((match) => Number(match[1]))
+    .filter((item) => Number.isFinite(item));
+
+  if (matches.length === 0) {
+    return null;
+  }
+
+  return Math.max(...matches);
+};
+
+const getAtsDecisionBand = ({
+  score,
+  requiredMissing,
+  experienceRequirementMet,
+  educationRequirementMet,
+  certificationRequirementMet,
+}: {
+  score: number | null;
+  requiredMissing: string[];
+  experienceRequirementMet: boolean | null;
+  educationRequirementMet: boolean | null;
+  certificationRequirementMet: boolean | null;
+}): AtsEvaluation["decisionBand"] => {
+  if (score === null) {
+    return "not_scored";
+  }
+
+  const hardRequirementFailed = requiredMissing.length > 0
+    || experienceRequirementMet === false
+    || educationRequirementMet === false
+    || certificationRequirementMet === false;
+
+  if (hardRequirementFailed) {
+    return score >= 70 ? "needs_review" : "low_match";
+  }
+
+  if (score >= 85) {
+    return "best_match";
+  }
+
+  if (score >= 70) {
+    return "strong_match";
+  }
+
+  if (score >= 55) {
+    return "qualified";
+  }
+
+  return "needs_review";
+};
+
+const getDeterministicSignals = ({
+  extractedText,
+  requiredKeywords,
+  preferredKeywords,
+  minimumYearsExperience,
+  requiredEducation,
+  requiredCertifications,
+}: {
+  extractedText: string;
+  requiredKeywords: string[];
+  preferredKeywords: string[];
+  minimumYearsExperience: number | null;
+  requiredEducation: string[];
+  requiredCertifications: string[];
+}) => getDeterministicKeywordEvaluation({
+  extractedText,
+  requiredKeywords,
+  preferredKeywords,
+  minimumYearsExperience,
+  requiredEducation,
+  requiredCertifications,
+});
 
 const extractResumeText = async (resumeBuffer: Buffer) => {
   const { PDFParse } = await import("pdf-parse");
@@ -280,7 +453,17 @@ const analyzeWithAI = async ({
   preferredKeywords,
 }: {
   extractedText: string;
-  job: Pick<JobRecord, "title" | "summary" | "requirements" | "department" | "experienceLevel">;
+  job: Pick<
+    JobRecord,
+    | "title"
+    | "summary"
+    | "requirements"
+    | "department"
+    | "experienceLevel"
+    | "atsMinimumYearsExperience"
+    | "atsRequiredEducation"
+    | "atsRequiredCertifications"
+  >;
   requiredKeywords: string[];
   preferredKeywords: string[];
 }) => {
@@ -307,6 +490,7 @@ const analyzeWithAI = async ({
               "Use the provided job context and keyword lists.",
               "Only mark a keyword as matched if the resume provides evidence for it.",
               "Normalize skills into concise technology or domain names.",
+              "Extract certifications, industries/domains, and seniority when the resume supports them.",
               "Do not invent experience or qualifications that are not present in the resume.",
             ].join(" "),
           },
@@ -326,6 +510,9 @@ const analyzeWithAI = async ({
                 requirements: job.requirements,
                 requiredKeywords,
                 preferredKeywords,
+                minimumYearsExperience: job.atsMinimumYearsExperience,
+                requiredEducation: job.atsRequiredEducation,
+                requiredCertifications: job.atsRequiredCertifications,
               },
               resumeText: truncatedResumeText,
             }),
@@ -356,6 +543,9 @@ export const evaluateResumeAgainstJob = async ({
     | "atsEnabled"
     | "atsRequiredKeywords"
     | "atsPreferredKeywords"
+    | "atsMinimumYearsExperience"
+    | "atsRequiredEducation"
+    | "atsRequiredCertifications"
   >;
 }): Promise<AtsEvaluation> => {
   if (!job.atsEnabled) {
@@ -364,6 +554,11 @@ export const evaluateResumeAgainstJob = async ({
 
   const requiredKeywords = parseAtsKeywordInput(job.atsRequiredKeywords);
   const preferredKeywords = parseAtsKeywordInput(job.atsPreferredKeywords);
+  const requiredEducation = parseAtsKeywordInput(job.atsRequiredEducation);
+  const requiredCertifications = parseAtsKeywordInput(job.atsRequiredCertifications);
+  const minimumYearsExperience = typeof job.atsMinimumYearsExperience === "number"
+    ? job.atsMinimumYearsExperience
+    : null;
 
   if (requiredKeywords.length === 0 && preferredKeywords.length === 0) {
     return buildNoConfigEvaluation();
@@ -371,12 +566,23 @@ export const evaluateResumeAgainstJob = async ({
 
   try {
     const extractedText = await extractResumeText(resumeBuffer);
+    const deterministicEvaluation = getDeterministicKeywordEvaluation({
+      extractedText,
+      requiredKeywords,
+      preferredKeywords,
+      minimumYearsExperience,
+      requiredEducation,
+      requiredCertifications,
+    });
 
     if (!extractedText.trim()) {
       return buildRulesEvaluation({
         extractedText: "",
         requiredKeywords,
         preferredKeywords,
+        minimumYearsExperience,
+        requiredEducation,
+        requiredCertifications,
         summaryOverride: "Resume text could not be extracted cleanly.",
       });
     }
@@ -390,19 +596,16 @@ export const evaluateResumeAgainstJob = async ({
       });
 
       if (aiResult) {
-        const requiredMatched = sanitizeKeywordMatches(requiredKeywords, aiResult.matchedRequiredKeywords);
-        const preferredMatched = sanitizeKeywordMatches(preferredKeywords, aiResult.matchedPreferredKeywords);
-        const requiredMissing = requiredKeywords.filter((keyword) => !requiredMatched.includes(keyword));
-        const preferredMissing = preferredKeywords.filter((keyword) => !preferredMatched.includes(keyword));
-
         const evaluation: AtsEvaluation = {
-          score: scoreAts({
-            requiredMatched,
-            requiredMissing,
-            preferredMatched,
-            preferredMissing,
-          }),
+          score: deterministicEvaluation.score,
           method: "ai",
+          decisionBand: getAtsDecisionBand({
+            score: deterministicEvaluation.score,
+            requiredMissing: deterministicEvaluation.requiredMissing,
+            experienceRequirementMet: deterministicEvaluation.experienceRequirementMet,
+            educationRequirementMet: deterministicEvaluation.educationRequirementMet,
+            certificationRequirementMet: deterministicEvaluation.certificationRequirementMet,
+          }),
           summary: "",
           candidateSummary: aiResult.candidateSummary.trim(),
           confidenceNotes: aiResult.confidenceNotes.trim(),
@@ -410,13 +613,22 @@ export const evaluateResumeAgainstJob = async ({
           normalizedSkills: normalizeUniqueStrings(aiResult.normalizedSkills),
           relevantRoles: normalizeUniqueStrings(aiResult.relevantRoles),
           education: normalizeUniqueStrings(aiResult.education),
+          certifications: normalizeUniqueStrings(aiResult.certifications),
+          domains: normalizeUniqueStrings(aiResult.domains),
+          seniority: aiResult.seniority.trim(),
+          confidenceScore: typeof aiResult.confidenceScore === "number"
+            ? Math.max(0, Math.min(100, Math.round(aiResult.confidenceScore)))
+            : null,
           yearsOfExperience: typeof aiResult.yearsOfExperience === "number"
             ? aiResult.yearsOfExperience
-            : null,
-          requiredMatched,
-          requiredMissing,
-          preferredMatched,
-          preferredMissing,
+            : deterministicEvaluation.yearsOfExperience,
+          experienceRequirementMet: deterministicEvaluation.experienceRequirementMet,
+          educationRequirementMet: deterministicEvaluation.educationRequirementMet,
+          certificationRequirementMet: deterministicEvaluation.certificationRequirementMet,
+          requiredMatched: deterministicEvaluation.requiredMatched,
+          requiredMissing: deterministicEvaluation.requiredMissing,
+          preferredMatched: deterministicEvaluation.preferredMatched,
+          preferredMissing: deterministicEvaluation.preferredMissing,
           evaluatedAt: new Date().toISOString(),
         };
 
@@ -433,6 +645,9 @@ export const evaluateResumeAgainstJob = async ({
       extractedText,
       requiredKeywords,
       preferredKeywords,
+      minimumYearsExperience,
+      requiredEducation,
+      requiredCertifications,
       summaryOverride: "Scored using rules-based keyword matching.",
     });
   } catch {
@@ -441,6 +656,9 @@ export const evaluateResumeAgainstJob = async ({
         extractedText: "",
         requiredKeywords,
         preferredKeywords,
+        minimumYearsExperience,
+        requiredEducation,
+        requiredCertifications,
         summaryOverride: "ATS parsing failed for this CV. The application is still saved.",
       }),
       score: 0,

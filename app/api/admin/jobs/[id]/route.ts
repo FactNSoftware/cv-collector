@@ -22,6 +22,9 @@ type JobPayload = {
   atsEnabled?: boolean;
   atsRequiredKeywords?: string[] | string;
   atsPreferredKeywords?: string[] | string;
+  atsMinimumYearsExperience?: number | null;
+  atsRequiredEducation?: string[] | string;
+  atsRequiredCertifications?: string[] | string;
   closingDate?: string;
   requirements?: string;
   benefits?: string;
@@ -64,6 +67,9 @@ export async function PATCH(
       atsEnabled: Boolean(body.atsEnabled),
       atsRequiredKeywords: parseAtsKeywordInput(body.atsRequiredKeywords),
       atsPreferredKeywords: parseAtsKeywordInput(body.atsPreferredKeywords),
+      atsMinimumYearsExperience: typeof body.atsMinimumYearsExperience === "number" ? body.atsMinimumYearsExperience : null,
+      atsRequiredEducation: parseAtsKeywordInput(body.atsRequiredEducation),
+      atsRequiredCertifications: parseAtsKeywordInput(body.atsRequiredCertifications),
       closingDate: body.closingDate ?? "",
       requirements: body.requirements ?? "",
       benefits: body.benefits ?? "",
@@ -91,6 +97,9 @@ export async function PATCH(
         atsEnabled: job.atsEnabled,
         atsRequiredKeywordCount: job.atsRequiredKeywords.length,
         atsPreferredKeywordCount: job.atsPreferredKeywords.length,
+        atsMinimumYearsExperience: job.atsMinimumYearsExperience,
+        atsRequiredEducationCount: job.atsRequiredEducation.length,
+        atsRequiredCertificationsCount: job.atsRequiredCertifications.length,
       },
     });
 

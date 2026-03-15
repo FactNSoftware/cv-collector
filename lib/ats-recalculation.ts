@@ -3,7 +3,15 @@ import type { JobRecord } from "./jobs";
 
 export const canSubmissionAtsBeRecalculated = (
   submission: Pick<CvSubmissionRecord, "atsStatus" | "atsConfigSignature" | "atsScore">,
-  job: Pick<JobRecord, "atsEnabled" | "atsRequiredKeywords" | "atsPreferredKeywords"> & {
+  job: Pick<
+    JobRecord,
+    | "atsEnabled"
+    | "atsRequiredKeywords"
+    | "atsPreferredKeywords"
+    | "atsMinimumYearsExperience"
+    | "atsRequiredEducation"
+    | "atsRequiredCertifications"
+  > & {
     atsConfigSignature?: string;
   },
 ) => {
@@ -15,13 +23,9 @@ export const canSubmissionAtsBeRecalculated = (
     return false;
   }
 
-  if (
-    submission.atsStatus === "success"
-    && submission.atsScore !== null
-    && !submission.atsConfigSignature
-  ) {
+  if (submission.atsStatus === "success" && submission.atsScore !== null) {
     return false;
   }
 
-  return submission.atsStatus !== "success" || submission.atsConfigSignature !== job.atsConfigSignature;
+  return submission.atsStatus === "failed";
 };
