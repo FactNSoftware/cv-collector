@@ -186,12 +186,12 @@ export function PortalShell({
 
   return (
     <div className="min-h-screen bg-[var(--color-canvas)] text-[var(--color-ink)]">
-      <div className="mx-auto flex min-h-screen max-w-[1600px] gap-4 px-3 py-3 sm:px-4 sm:py-4">
-        <aside className="sticky top-3 hidden h-[calc(100vh-24px)] w-[88px] shrink-0 flex-col rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel-strong)] p-3 shadow-[var(--shadow-soft)] lg:flex sm:top-4 sm:h-[calc(100vh-32px)]">
-          <div className="mb-6 flex h-14 items-center justify-center rounded-2xl bg-[var(--color-sidebar-accent)] text-[var(--color-sidebar-accent-ink)]">
+      <div className="flex min-h-screen w-full gap-3 px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 lg:px-5 xl:px-6">
+        <aside className="sticky top-3 hidden h-[calc(100vh-24px)] w-[74px] shrink-0 flex-col rounded-[26px] border border-[var(--color-border-strong)] bg-[linear-gradient(180deg,rgba(245,249,243,0.96),rgba(231,240,231,0.96))] p-2.5 shadow-[var(--shadow-soft)] lg:flex sm:top-4 sm:h-[calc(100vh-32px)]">
+          <div className="mb-5 flex h-12 items-center justify-center rounded-[18px] bg-[var(--color-sidebar-accent)] text-[var(--color-sidebar-accent-ink)]">
             {portal === "admin" ? <ShieldCheck className="h-6 w-6" /> : candidatePortalMark}
           </div>
-          <nav className="flex flex-1 flex-col gap-3">
+          <nav className="flex flex-1 flex-col gap-2.5">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = isActivePath(pathname, item);
@@ -202,13 +202,16 @@ export function PortalShell({
                   href={item.href}
                   title={item.label}
                   aria-label={item.label}
-                  className={`flex h-12 items-center justify-center rounded-2xl border transition ${
+                  className={`group relative flex h-11 items-center justify-center rounded-[18px] border transition ${
                     active
                       ? "theme-surface-active"
                       : "border-transparent bg-transparent text-[var(--color-muted)] hover:border-[var(--color-border)] hover:bg-white"
                   }`}
                 >
                   <Icon className="h-5 w-5" />
+                  <span className="pointer-events-none absolute left-[calc(100%+10px)] top-1/2 hidden -translate-y-1/2 whitespace-nowrap rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-panel)] px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] opacity-0 shadow-[var(--shadow-soft)] transition group-hover:opacity-100 xl:block">
+                    {item.label}
+                  </span>
                 </Link>
               );
             })}
@@ -218,17 +221,28 @@ export function PortalShell({
               href={switchHref}
               title={switchLabel}
               aria-label={switchLabel}
-              className="mt-3 flex h-12 items-center justify-center rounded-2xl border border-[var(--color-border)] bg-white text-[var(--color-muted)] transition hover:border-[var(--color-sidebar-accent)] hover:text-[var(--color-ink)]"
+              className="group relative mt-2.5 flex h-11 items-center justify-center rounded-[18px] border border-[var(--color-border)] bg-white text-[var(--color-muted)] transition hover:border-[var(--color-sidebar-accent)] hover:text-[var(--color-ink)]"
             >
               {portal === "admin" ? <LayoutGrid className="h-5 w-5" /> : <ShieldCheck className="h-5 w-5" />}
+              <span className="pointer-events-none absolute left-[calc(100%+10px)] top-1/2 hidden -translate-y-1/2 whitespace-nowrap rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-panel)] px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] opacity-0 shadow-[var(--shadow-soft)] transition group-hover:opacity-100 xl:block">
+                {switchLabel}
+              </span>
             </Link>
           )}
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col gap-4">
-          <header className="rounded-[30px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] px-5 py-5 shadow-[var(--shadow-soft)] sm:px-6">
+        <div className="flex min-w-0 flex-1 flex-col gap-3 pb-24 sm:gap-4 lg:pb-0">
+          <header className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] px-5 py-5 shadow-[var(--shadow-soft)] sm:px-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
+                <div className="mb-3 flex items-center gap-3 lg:hidden">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-[18px] bg-[var(--color-sidebar-accent)] text-[var(--color-sidebar-accent-ink)] shadow-[var(--shadow-soft)]">
+                    {portal === "admin" ? <ShieldCheck className="h-5 w-5" /> : candidatePortalMark}
+                  </div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--color-muted)]">
+                    {portal === "admin" ? "Admin Portal" : "Candidate Portal"}
+                  </p>
+                </div>
                 {breadcrumbs.length > 0 && (
                   <nav
                     aria-label="Breadcrumb"
@@ -291,32 +305,36 @@ export function PortalShell({
               </div>
             </div>
 
-            <div className="mt-5 flex items-center gap-2 overflow-x-auto lg:hidden">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                const active = isActivePath(pathname, item);
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`theme-action-button inline-flex items-center gap-2 rounded-2xl border px-4 py-2 whitespace-nowrap transition ${
-                      active
-                        ? "theme-surface-active"
-                        : "border-[var(--color-border)] bg-white text-[var(--color-muted)]"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </div>
           </header>
 
           <main className="min-w-0 flex-1">{children}</main>
         </div>
       </div>
+
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--color-border-strong)] bg-[rgba(252,253,249,0.96)] px-3 py-3 backdrop-blur lg:hidden">
+        <div className="mx-auto flex max-w-screen-sm items-center justify-between gap-2 rounded-[24px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-2 shadow-[var(--shadow-soft)]">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const active = isActivePath(pathname, item);
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                title={item.label}
+                aria-label={item.label}
+                className={`theme-action-button flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] transition ${
+                  active
+                    ? "theme-surface-active"
+                    : "text-[var(--color-muted)] hover:bg-white"
+                }`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 }

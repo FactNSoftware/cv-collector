@@ -465,92 +465,98 @@ export function AdminJobCandidates({
       primaryActionHref={`/admin/jobs/${job.id}/edit`}
       primaryActionLabel="Edit Job"
     >
-      <div className="space-y-4">
-        <section className="grid gap-4 md:grid-cols-4">
-          <article className="rounded-[24px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-5 shadow-[var(--shadow-soft)]">
+      <div className="space-y-3 sm:space-y-4">
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <article className="rounded-[24px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] px-6 py-5 shadow-[var(--shadow-soft)]">
             <p className="text-sm text-slate-500">Applicants</p>
             <p className="mt-2 text-2xl font-semibold text-slate-900">{items.length}</p>
           </article>
-          <article className="rounded-[24px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-5 shadow-[var(--shadow-soft)]">
+          <article className="rounded-[24px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] px-6 py-5 shadow-[var(--shadow-soft)]">
             <p className="text-sm text-slate-500">Employment</p>
             <p className="mt-2 text-lg font-semibold text-slate-900">{job.employmentType}</p>
           </article>
-          <article className="rounded-[24px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-5 shadow-[var(--shadow-soft)]">
+          <article className="rounded-[24px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] px-6 py-5 shadow-[var(--shadow-soft)]">
             <p className="text-sm text-slate-500">Workplace</p>
             <p className="mt-2 text-lg font-semibold text-slate-900">{job.workplaceType}</p>
           </article>
-          <article className="rounded-[24px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-5 shadow-[var(--shadow-soft)]">
+          <article className="rounded-[24px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] px-6 py-5 shadow-[var(--shadow-soft)]">
             <p className="text-sm text-slate-500">Location</p>
             <p className="mt-2 text-lg font-semibold text-slate-900">{job.location || "Not set"}</p>
           </article>
         </section>
 
-        <section className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-6 shadow-[var(--shadow-soft)]">
-          <div className="flex items-center justify-between gap-3">
+        <section className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-5 shadow-[var(--shadow-soft)] sm:p-6">
+          <div className="flex flex-col gap-4">
             <div>
               <h2 className="text-xl font-semibold text-slate-900">Candidate List</h2>
               <p className="text-sm text-slate-600">Open a candidate to inspect their full profile and history.</p>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(event) => {
-                  setSearchQuery(event.target.value);
-                  setTablePageIndex(0);
-                }}
-                placeholder="Search by name, email, phone, CV"
-                className="h-11 min-w-[260px] rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand)]"
-              />
-              <select
-                value={reviewFilter}
-                onChange={(event) => {
-                  setReviewFilter(event.target.value as ReviewFilterValue);
-                  setTablePageIndex(0);
-                }}
-                className="h-11 rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand)]"
-              >
-                <option value="all">All statuses</option>
-                <option value="pending">Pending</option>
-                <option value="accepted">Accepted</option>
-                <option value="rejected">Rejected</option>
-              </select>
-              {job.atsEnabled ? (
-                <select
-                  value={atsFilter}
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                <input
+                  type="search"
+                  value={searchQuery}
                   onChange={(event) => {
-                    setAtsFilter(event.target.value as AtsFilterValue);
+                    setSearchQuery(event.target.value);
                     setTablePageIndex(0);
                   }}
-                  className="h-11 rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand)]"
+                  placeholder="Search by name, email, phone,"
+                  className="h-11 w-full rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand)] sm:min-w-[300px] sm:max-w-[420px]"
+                />
+                <select
+                  value={reviewFilter}
+                  onChange={(event) => {
+                    setReviewFilter(event.target.value as ReviewFilterValue);
+                    setTablePageIndex(0);
+                  }}
+                  className="h-11 min-w-[140px] rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand)]"
                 >
-                  <option value="all">All ATS scores</option>
-                  <option value="80_plus">ATS 80% and above</option>
-                  <option value="60_79">ATS 60% to 79%</option>
-                  <option value="40_59">ATS 40% to 59%</option>
-                  <option value="below_40">ATS below 40%</option>
-                  <option value="not_scored">ATS not scored</option>
+                  <option value="all">All statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="rejected">Rejected</option>
                 </select>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => setConfirmAction({
-                  title: "Download all CVs?",
-                  message: "This will prepare a ZIP file containing the latest CV from each candidate for this job.",
-                  confirmLabel: "Download ZIP",
-                  loadingLabel: "Preparing ZIP...",
-                  tone: "neutral",
-                  onConfirm: async () => {
-                    await downloadAllCvs();
-                  },
-                })}
-                disabled={items.length === 0 || isDownloadingZip}
-                className="theme-action-button theme-action-button-secondary inline-flex items-center rounded-2xl px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <FileArchive className="mr-2 h-4 w-4" />
-                Download All CVs
-              </button>
-              <AdminViewModeToggle value={viewMode} onChange={setViewMode} />
+                {job.atsEnabled ? (
+                  <select
+                    value={atsFilter}
+                    onChange={(event) => {
+                      setAtsFilter(event.target.value as AtsFilterValue);
+                      setTablePageIndex(0);
+                    }}
+                    className="h-11 min-w-[160px] rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand)]"
+                  >
+                    <option value="all">All ATS scores</option>
+                    <option value="80_plus">ATS 80% and above</option>
+                    <option value="60_79">ATS 60% to 79%</option>
+                    <option value="40_59">ATS 40% to 59%</option>
+                    <option value="below_40">ATS below 40%</option>
+                    <option value="not_scored">ATS not scored</option>
+                  </select>
+                ) : null}
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction({
+                    title: "Download all CVs?",
+                    message: "This will prepare a ZIP file containing the latest CV from each candidate for this job.",
+                    confirmLabel: "Download ZIP",
+                    loadingLabel: "Preparing ZIP...",
+                    tone: "neutral",
+                    onConfirm: async () => {
+                      await downloadAllCvs();
+                    },
+                  })}
+                  disabled={items.length === 0 || isDownloadingZip}
+                  className="theme-action-button theme-action-button-secondary inline-flex items-center justify-center rounded-2xl px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <FileArchive className="mr-2 h-4 w-4" />
+                  Download All CVs
+                </button>
+                <div className="self-end sm:self-auto">
+                  <AdminViewModeToggle value={viewMode} onChange={setViewMode} />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -578,8 +584,8 @@ export function AdminJobCandidates({
           ) : (
             <div className="mt-5 space-y-3">
               {rankedItems.length > 0 ? rankedItems.map((submission) => (
-                <article key={submission.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
+                <article key={submission.id} className="rounded-[22px] border border-slate-200 bg-slate-50 px-5 py-4">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-lg font-semibold text-slate-900">
@@ -623,7 +629,7 @@ export function AdminJobCandidates({
                         {renderAtsBadge(submission)}
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 xl:max-w-[520px] xl:justify-end">
                       {submission.reviewStatus === "pending" ? (
                         <>
                           <button

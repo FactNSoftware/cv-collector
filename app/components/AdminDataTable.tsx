@@ -61,7 +61,7 @@ export function AdminDataTable<TData>({
   });
 
   return (
-    <div className="overflow-hidden rounded-[24px] border border-[var(--color-border-strong)] bg-white shadow-[var(--shadow-soft)]">
+    <div className="overflow-hidden rounded-[22px] border border-[var(--color-border-strong)] bg-white shadow-[var(--shadow-soft)]">
       <div className="overflow-x-auto">
         <Table className="table-fixed">
           <TableHeader className="bg-[var(--color-panel)]">
@@ -132,7 +132,7 @@ export function AdminDataTable<TData>({
         </Table>
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-[var(--color-border)] px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] px-4 py-3">
         <div className="flex items-center gap-3">
           <div className="text-sm text-[var(--color-muted)]">
             Page {pageIndex + 1}
