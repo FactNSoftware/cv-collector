@@ -16,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "./ui/table";
+import { useMemo } from "react";
 
 type AdminDataTableProps<TData> = {
   data: TData[];
@@ -48,6 +49,11 @@ export function AdminDataTable<TData>({
   onPageSizeChange,
   onRowClick,
 }: AdminDataTableProps<TData>) {
+  const resolvedPageSizeOptions = useMemo(() => {
+    const uniqueOptions = new Set([...pageSizeOptions, pageSize]);
+    return [...uniqueOptions].sort((left, right) => left - right);
+  }, [pageSize, pageSizeOptions]);
+
   const table = useReactTable({
     data,
     columns,
@@ -91,6 +97,20 @@ export function AdminDataTable<TData>({
                   {row.getVisibleCells().map((cell) => (
                     <TableCell
                       key={cell.id}
+                      onClick={
+                        cell.column.id === "actions"
+                          ? (event) => {
+                              event.stopPropagation();
+                            }
+                          : undefined
+                      }
+                      onMouseDown={
+                        cell.column.id === "actions"
+                          ? (event) => {
+                              event.stopPropagation();
+                            }
+                          : undefined
+                      }
                       className={`${cell.column.id === "actions" ? "w-[84px] whitespace-nowrap text-right" : "align-top"} `}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -125,7 +145,7 @@ export function AdminDataTable<TData>({
                 onChange={(event) => onPageSizeChange(Number(event.target.value))}
                 className="h-9 rounded-xl border border-[var(--color-border)] bg-white px-3 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand)]"
               >
-                {pageSizeOptions.map((option) => (
+                {resolvedPageSizeOptions.map((option) => (
                   <option key={option} value={option}>{option}</option>
                 ))}
               </select>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildAdminJobListItems } from "../../../../lib/admin-list-types";
+import { parseAtsKeywordInput } from "../../../../lib/ats";
 import { recordAdminAuditEvent } from "../../../../lib/audit-log";
 import { requireAdminApiSession } from "../../../../lib/auth-guards";
 import { listJobs, upsertJob } from "../../../../lib/jobs";
@@ -21,6 +22,9 @@ type JobPayload = {
   salaryRange?: string;
   vacancies?: number | null;
   maxRetryAttempts?: number | null;
+  atsEnabled?: boolean;
+  atsRequiredKeywords?: string[] | string;
+  atsPreferredKeywords?: string[] | string;
   closingDate?: string;
   requirements?: string;
   benefits?: string;
@@ -100,6 +104,9 @@ export async function POST(request: Request) {
       salaryRange: body.salaryRange ?? "",
       vacancies: typeof body.vacancies === "number" ? body.vacancies : null,
       maxRetryAttempts: typeof body.maxRetryAttempts === "number" ? body.maxRetryAttempts : 0,
+      atsEnabled: Boolean(body.atsEnabled),
+      atsRequiredKeywords: parseAtsKeywordInput(body.atsRequiredKeywords),
+      atsPreferredKeywords: parseAtsKeywordInput(body.atsPreferredKeywords),
       closingDate: body.closingDate ?? "",
       requirements: body.requirements ?? "",
       benefits: body.benefits ?? "",
@@ -120,6 +127,9 @@ export async function POST(request: Request) {
         title: job.title,
         isPublished: job.isPublished,
         maxRetryAttempts: job.maxRetryAttempts,
+        atsEnabled: job.atsEnabled,
+        atsRequiredKeywordCount: job.atsRequiredKeywords.length,
+        atsPreferredKeywordCount: job.atsPreferredKeywords.length,
       },
     });
 

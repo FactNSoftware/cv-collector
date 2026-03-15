@@ -40,8 +40,178 @@ This is cheaper than the previous App Service + Cosmos DB approach for a small o
 - `AZURE_EMAIL_SENDER_ADDRESS`
 - `AUTH_SECRET`
 - `ADMIN_PERMISSION_TOKEN`
+- `ADMIN_PERMISSION_TOKEN_EXPIRES_AT`
+- `OPENAI_API_KEY`
+- `ATS_OPENAI_MODEL`
 
 `AZURE_BLOB_CONNECTION_STRING` is still supported as a fallback for backward compatibility, but the preferred variable is `AZURE_STORAGE_CONNECTION_STRING`.
+
+If `OPENAI_API_KEY` is configured, CV submissions use AI-assisted ATS extraction on the backend and store a structured scoring result for admin review. If it is not configured, the app falls back to rules-based keyword matching so submissions still work.
+
+## ATS Functionality
+
+The app includes an optional ATS analysis pipeline for each job. ATS is configured per job, runs on the backend, stores its result with the application record, and is shown in the admin review experience.
+
+### Job-Level ATS Configuration
+
+ATS is controlled per job from the admin job editor.
+
+- `Enable ATS analysis for this job`
+- `Required ATS keywords`
+- `Preferred ATS keywords`
+
+Behavior:
+
+- if ATS is off for a job, applications are saved without ATS analysis
+- if ATS is on, required and preferred keywords are saved with the job
+- ATS configuration is versioned internally through a job ATS config signature
+
+### Submission Flow
+
+When a candidate submits a CV for a job with ATS enabled, the flow is:
+
+1. candidate uploads CV and submits the application
+2. application is saved immediately
+3. ATS work is queued in the background
+4. queue worker downloads the stored CV and extracts resume text
+5. backend analyzes the resume against the job ATS configuration
+6. ATS result is stored on the submission record
+7. admin UI refreshes and shows the final ATS result
+
+This means CV submission is not blocked while ATS runs.
+
+### ATS Evaluation Pipeline
+
+The implemented backend flow is:
+
+1. download the candidate CV from Blob Storage
+2. extract text from the PDF resume
+3. if `OPENAI_API_KEY` is configured, use AI-assisted analysis to normalize skills and role fit
+4. if AI is unavailable or fails, fall back to deterministic rules-based scoring
+5. compare extracted data against:
+   - required ATS keywords
+   - preferred ATS keywords
+6. generate ATS result fields
+7. store the ATS result with the submission
+
+### Stored ATS Data
+
+Each submission can store:
+
+- `atsStatus`
+- `atsScore`
+- `atsMethod`
+- `atsSummary`
+- `atsCandidateSummary`
+- `atsConfidenceNotes`
+- `atsExtractedTextPreview`
+- `atsNormalizedSkills`
+- `atsRelevantRoles`
+- `atsEducation`
+- `atsYearsOfExperience`
+- `atsRequiredMatched`
+- `atsRequiredMissing`
+- `atsPreferredMatched`
+- `atsPreferredMissing`
+- `atsEvaluatedAt`
+- `atsConfigSignature`
+
+### ATS Status Values
+
+The system uses these ATS states:
+
+- `none`
+  - ATS is disabled for the job
+- `queued`
+  - ATS work is waiting to run
+- `processing`
+  - ATS evaluation is running in the background
+- `success`
+  - ATS completed and a scored result is stored
+- `failed`
+  - ATS could not complete; the application is still saved
+
+### Admin ATS Experience
+
+ATS results are available in admin review surfaces:
+
+- admin candidate list
+- job-specific candidate list
+- admin candidate detail page
+
+Admin behavior:
+
+- ATS-enabled job candidate lists are sorted by highest ATS score first
+- ATS filtering is available on the job candidate list
+- ranking labels such as `Best match`, `Strong match`, `Qualified`, and `Needs review` are shown when ATS is enabled
+- compact ATS badges are shown inline
+- detailed ATS information is shown in a `View ATS` modal
+
+### ATS Details Modal
+
+The ATS details modal can show:
+
+- ATS status / score
+- analysis method
+- candidate summary
+- confidence notes
+- estimated experience
+- normalized skills
+- relevant roles
+- education
+- matched required keywords
+- missing required keywords
+- matched preferred keywords
+- missing preferred keywords
+- evaluation timestamp
+
+### Recalculate ATS
+
+Admins can request ATS recalculation for an existing submission, but recalculation is intentionally restricted to avoid unnecessary repeated AI cost.
+
+Rules:
+
+- recalculation is allowed if:
+  - ATS previously failed, or
+  - the job ATS configuration changed after the last successful ATS result
+- recalculation is blocked if:
+  - ATS already succeeded, and
+  - the job ATS configuration has not changed
+
+This prevents repeated recalculation of already-valid ATS results.
+
+### Queue and Refresh Behavior
+
+ATS processing is queue-based.
+
+- candidate submission saves immediately
+- ATS runs in the background
+- admin job candidate list auto-refreshes while any row is `queued` or `processing`
+- admin candidate detail auto-refreshes while any submission is `queued` or `processing`
+
+If ATS is still in flight, admin users can refresh manually as well and the latest status will be shown.
+
+### Cost Control
+
+ATS is designed to reduce unnecessary AI usage:
+
+- ATS can be turned off per job
+- if ATS is off, no ATS evaluation runs
+- successful ATS results are reused
+- recalculation is blocked unless the result failed or the ATS config changed
+- rules-based fallback allows submissions to continue even if AI is unavailable
+
+### Current File Support
+
+Current ATS resume parsing support:
+
+- PDF resumes: supported
+
+If parsing fails:
+
+- the application is still saved
+- ATS status becomes `failed`
+- admin can retry later through `Recalculate ATS` if allowed
 
 ## Local Development
 
@@ -102,6 +272,7 @@ Required GitHub secrets:
 - `AZURE_EMAIL_SENDER_ADDRESS`
 - `AUTH_SECRET`
 - `ADMIN_PERMISSION_TOKEN`
+- `ADMIN_PERMISSION_TOKEN_EXPIRES_AT`
 
 ## Notes
 
@@ -121,12 +292,17 @@ curl -X POST http://localhost:3000/api/admin/register \
   -H "Content-Type: application/json" \
   -d '{
     "email": "admin@example.com",
-    "permissionToken": "your-ADMIN_PERMISSION_TOKEN",
-    "createdBy": "bootstrap"
+    "permissionToken": "your-ADMIN_PERMISSION_TOKEN"
   }'
 ```
 
-Only requests with the correct `ADMIN_PERMISSION_TOKEN` can create admin accounts.
+Bootstrap is hardened as follows:
+
+- it works only until the first admin account is created
+- requests require the correct `ADMIN_PERMISSION_TOKEN`
+- failed bootstrap attempts are rate-limited
+- `ADMIN_PERMISSION_TOKEN_EXPIRES_AT` can be used to enforce regular token rotation
+- bootstrap audit records are always attributed server-side as `system`
 
 After the first admin signs in, authenticated admins can add other admins from the
 admin portal without providing the bootstrap token again.

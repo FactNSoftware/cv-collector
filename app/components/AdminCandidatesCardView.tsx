@@ -36,6 +36,23 @@ export function AdminCandidatesCardView({ items }: AdminCandidatesCardViewProps)
               <span className="rounded-full bg-white px-3 py-1.5 font-semibold text-[var(--color-ink)]">
                 {candidate.submissionCount} submission{candidate.submissionCount === 1 ? "" : "s"}
               </span>
+              {candidate.latestAtsStatus === "queued" ? (
+                <span className="rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-800">
+                  ATS queued
+                </span>
+              ) : candidate.latestAtsStatus === "processing" ? (
+                <span className="rounded-full bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-800">
+                  ATS processing
+                </span>
+              ) : candidate.latestAtsStatus === "failed" ? (
+                <span className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-800">
+                  ATS failed
+                </span>
+              ) : candidate.latestAtsScore !== null ? (
+                <span className="rounded-full bg-[var(--color-panel-strong)] px-3 py-1.5 text-xs font-semibold text-[var(--color-brand-strong)]">
+                  ATS {candidate.latestAtsScore}%
+                </span>
+              ) : null}
               <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
                 candidate.latestReviewStatus === "accepted"
                   ? "bg-emerald-100 text-emerald-800"

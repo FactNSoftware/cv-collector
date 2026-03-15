@@ -1,5 +1,6 @@
 import { AdminCandidatesIndex } from "../../components/AdminCandidatesIndex";
 import { buildAdminCandidateListItems } from "../../../lib/admin-list-types";
+import { triggerAtsQueueProcessing } from "../../../lib/ats-queue";
 import { requireAdminPageSession } from "../../../lib/auth-guards";
 import { listCandidateProfiles } from "../../../lib/candidate-profile";
 import { listCvSubmissions } from "../../../lib/cv-storage";
@@ -9,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminCandidatesPage() {
   const session = await requireAdminPageSession();
+  void triggerAtsQueueProcessing({ reason: "admin_candidates_page", limit: 2 });
   const [profiles, submissions] = await Promise.all([
     listCandidateProfiles(),
     listCvSubmissions(),

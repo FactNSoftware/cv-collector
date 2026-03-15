@@ -211,9 +211,6 @@ export function AdminJobsIndex({
             <JobStatusBadge isPublished={row.original.isPublished} />
           </div>
           <div className="font-semibold text-[var(--color-ink)]">{row.original.title}</div>
-          <div className="max-w-xl text-xs leading-6 text-[var(--color-muted)]">
-            {row.original.summary || "No summary provided"}
-          </div>
         </div>
       ),
     },
@@ -360,7 +357,7 @@ export function AdminJobsIndex({
             onPreviousPage={goToPreviousPage}
             onNextPage={goToNextPage}
             onPageSizeChange={setTablePageSize}
-            onRowClick={(job) => router.push(`/admin/jobs/${job.id}/edit`)}
+            onRowClick={(job) => router.push(`/admin/jobs/${job.id}/candidates`)}
           />
         ) : (
           <>

@@ -40,6 +40,9 @@ const EMPTY_JOB_FORM: JobFormState = {
   salaryRange: "",
   vacancies: "1",
   maxRetryAttempts: "0",
+  atsEnabled: false,
+  atsRequiredKeywords: "",
+  atsPreferredKeywords: "",
   closingDate: "",
   requirements: "",
   benefits: "",
@@ -59,6 +62,9 @@ const toJobFormState = (job: JobRecord): JobFormState => ({
   salaryRange: job.salaryRange,
   vacancies: job.vacancies ? String(job.vacancies) : "1",
   maxRetryAttempts: String(job.maxRetryAttempts ?? 0),
+  atsEnabled: job.atsEnabled,
+  atsRequiredKeywords: job.atsRequiredKeywords.join("\n"),
+  atsPreferredKeywords: job.atsPreferredKeywords.join("\n"),
   closingDate: job.closingDate,
   requirements: job.requirements,
   benefits: job.benefits,
@@ -99,6 +105,9 @@ export function JobEditorForm({
             ...jobForm,
             vacancies: Number(jobForm.vacancies) || 1,
             maxRetryAttempts: Math.max(0, Number(jobForm.maxRetryAttempts) || 0),
+            atsEnabled: Boolean(jobForm.atsEnabled),
+            atsRequiredKeywords: jobForm.atsRequiredKeywords,
+            atsPreferredKeywords: jobForm.atsPreferredKeywords,
           }),
         },
       );
@@ -306,6 +315,53 @@ export function JobEditorForm({
                 <span className="mb-2 block text-sm font-semibold text-slate-800">Closing date</span>
                 <input type="date" value={jobForm.closingDate} onChange={(event) => setJobForm((current) => ({ ...current, closingDate: event.target.value }))} className="h-12 w-full rounded-xl border border-[var(--color-border)] bg-white px-4 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]" />
               </label>
+            </div>
+
+            <div className="space-y-5">
+              <label className="flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel-strong)] px-4 py-3 text-sm text-[var(--color-ink)]">
+                <input
+                  type="checkbox"
+                  checked={jobForm.atsEnabled}
+                  onChange={(event) => setJobForm((current) => ({
+                    ...current,
+                    atsEnabled: event.target.checked,
+                    atsRequiredKeywords: event.target.checked ? current.atsRequiredKeywords : "",
+                    atsPreferredKeywords: event.target.checked ? current.atsPreferredKeywords : "",
+                  }))}
+                />
+                Enable ATS analysis for this job
+              </label>
+              {jobForm.atsEnabled ? (
+                <>
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-semibold text-slate-800">Required ATS keywords</span>
+                    <textarea
+                      value={jobForm.atsRequiredKeywords}
+                      onChange={(event) => setJobForm((current) => ({ ...current, atsRequiredKeywords: event.target.value }))}
+                      rows={4}
+                      placeholder={"One keyword or phrase per line.\nExample:\nReact\nTypeScript\nNext.js"}
+                      className="w-full rounded-xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]"
+                    />
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      Required keywords carry most of the ATS score weight.
+                    </p>
+                  </label>
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-semibold text-slate-800">Preferred ATS keywords</span>
+                    <textarea
+                      value={jobForm.atsPreferredKeywords}
+                      onChange={(event) => setJobForm((current) => ({ ...current, atsPreferredKeywords: event.target.value }))}
+                      rows={4}
+                      placeholder={"Optional bonus keywords.\nExample:\nAzure\nCI/CD\nFigma"}
+                      className="w-full rounded-xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]"
+                    />
+                  </label>
+                </>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  ATS scoring is off for this job. Applications will be saved without ATS analysis.
+                </p>
+              )}
             </div>
 
               <section className="rounded-[28px] border border-[var(--color-border)] bg-[var(--color-panel-strong)] p-5">

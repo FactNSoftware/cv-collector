@@ -1,14 +1,16 @@
 import { randomUUID } from "crypto";
 import {
+  downloadCvUpload,
   deleteCvUpload,
   saveCvPdf,
 } from "./cv-file-service";
+import type { AtsEvaluation } from "./ats";
 import {
   getAppTableClient,
   isTableConflictError,
   isTableNotFoundError,
 } from "./azure-tables";
-import { getJobById } from "./jobs";
+import { getJobAtsConfigSignature, getJobById, type JobRecord } from "./jobs";
 import { buildPageInfo, type PageInfo } from "./pagination";
 
 const CV_SCOPE = "cv";
@@ -37,6 +39,23 @@ export type CvSubmissionRecord = {
   resumeStoredName: string;
   resumeMimeType: string;
   reviewStatus: CvReviewStatus;
+  atsStatus: "none" | "queued" | "processing" | "success" | "failed";
+  atsConfigSignature: string;
+  atsScore: number | null;
+  atsMethod: "ai" | "rules" | "none";
+  atsSummary: string;
+  atsCandidateSummary: string;
+  atsConfidenceNotes: string;
+  atsExtractedTextPreview: string;
+  atsNormalizedSkills: string[];
+  atsRelevantRoles: string[];
+  atsEducation: string[];
+  atsYearsOfExperience: number | null;
+  atsRequiredMatched: string[];
+  atsRequiredMissing: string[];
+  atsPreferredMatched: string[];
+  atsPreferredMissing: string[];
+  atsEvaluatedAt: string | null;
   rejectionReason: string;
   reviewedAt: string | null;
   reviewedBy: string;
@@ -61,6 +80,8 @@ type CreateCvSubmissionInput = {
   resumeOriginalName: string;
   resumeMimeType: string;
   resumeBuffer: Buffer;
+  jobAtsConfigSignature: string;
+  atsEnabled: boolean;
 };
 
 type UpdateCvSubmissionReviewInput = {
@@ -68,6 +89,10 @@ type UpdateCvSubmissionReviewInput = {
   reviewStatus: CvReviewStatus;
   reviewedBy: string;
   rejectionReason?: string;
+};
+
+type UpdateCvSubmissionAtsInput = {
+  id: string;
 };
 
 export class DuplicateApplicantError extends Error {
@@ -81,6 +106,13 @@ export class InvalidApplicationReviewTransitionError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "InvalidApplicationReviewTransitionError";
+  }
+}
+
+export class AtsRecalculationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AtsRecalculationError";
   }
 }
 
@@ -101,6 +133,23 @@ type CvSubmissionDocument = {
   resumeStoredName: string;
   resumeMimeType: string;
   reviewStatus?: string;
+  atsStatus?: string;
+  atsConfigSignature?: string;
+  atsScore?: number;
+  atsMethod?: string;
+  atsSummary?: string;
+  atsCandidateSummary?: string;
+  atsConfidenceNotes?: string;
+  atsExtractedTextPreview?: string;
+  atsNormalizedSkillsJson?: string;
+  atsRelevantRolesJson?: string;
+  atsEducationJson?: string;
+  atsYearsOfExperience?: number;
+  atsRequiredMatchedJson?: string;
+  atsRequiredMissingJson?: string;
+  atsPreferredMatchedJson?: string;
+  atsPreferredMissingJson?: string;
+  atsEvaluatedAt?: number;
   rejectionReason?: string;
   reviewedAt?: number;
   reviewedBy?: string;
@@ -111,7 +160,61 @@ const normalizeReviewStatus = (value: string | undefined): CvReviewStatus => {
   return CV_REVIEW_STATUSES.find((item) => item === value) ?? "pending";
 };
 
+const parseStringArray = (value: string | undefined) => {
+  if (!value) {
+    return [] as string[];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
+};
+
+const toNullableFiniteNumber = (value: unknown) => {
+  const numericValue = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
+};
+
+const toOptionalFiniteNumber = (value: unknown) => {
+  const numericValue = toNullableFiniteNumber(value);
+  return numericValue === null ? undefined : numericValue;
+};
+
+const normalizeStoredAtsScore = (value: unknown) => {
+  const numericValue = toNullableFiniteNumber(value);
+
+  if (numericValue === null) {
+    return null;
+  }
+
+  if (numericValue >= 0 && numericValue <= 100) {
+    return numericValue;
+  }
+
+  // Compatibility fix for scores saved before the weighted formula bug was corrected.
+  if (numericValue > 100 && numericValue <= 10_000) {
+    return Math.round(numericValue / 100);
+  }
+
+  return Math.max(0, Math.min(100, Math.round(numericValue)));
+};
+
+const normalizeStoredAtsSummary = (summary: string, score: number | null) => {
+  if (!summary || score === null) {
+    return summary;
+  }
+
+  return summary.replace(/^\d+% match\./, `${score}% match.`);
+};
+
 const toRecord = (submission: CvSubmissionDocument): CvSubmissionRecord => {
+  const atsScore = normalizeStoredAtsScore(submission.atsScore);
+
   return {
     id: submission.rowKey.replace(/^submission:/, ""),
     firstName: submission.firstName,
@@ -127,6 +230,32 @@ const toRecord = (submission: CvSubmissionDocument): CvSubmissionRecord => {
     resumeStoredName: submission.resumeStoredName,
     resumeMimeType: submission.resumeMimeType,
     reviewStatus: normalizeReviewStatus(submission.reviewStatus),
+    atsStatus: submission.atsStatus === "queued"
+      || submission.atsStatus === "processing"
+      || submission.atsStatus === "success"
+      || submission.atsStatus === "failed"
+      ? submission.atsStatus
+      : "none",
+    atsConfigSignature: submission.atsConfigSignature ?? "",
+    atsScore,
+    atsMethod: submission.atsMethod === "ai" || submission.atsMethod === "rules" || submission.atsMethod === "none"
+      ? submission.atsMethod
+      : "none",
+    atsSummary: normalizeStoredAtsSummary(submission.atsSummary ?? "", atsScore),
+    atsCandidateSummary: submission.atsCandidateSummary ?? "",
+    atsConfidenceNotes: submission.atsConfidenceNotes ?? "",
+    atsExtractedTextPreview: submission.atsExtractedTextPreview ?? "",
+    atsNormalizedSkills: parseStringArray(submission.atsNormalizedSkillsJson),
+    atsRelevantRoles: parseStringArray(submission.atsRelevantRolesJson),
+    atsEducation: parseStringArray(submission.atsEducationJson),
+    atsYearsOfExperience: toNullableFiniteNumber(submission.atsYearsOfExperience),
+    atsRequiredMatched: parseStringArray(submission.atsRequiredMatchedJson),
+    atsRequiredMissing: parseStringArray(submission.atsRequiredMissingJson),
+    atsPreferredMatched: parseStringArray(submission.atsPreferredMatchedJson),
+    atsPreferredMissing: parseStringArray(submission.atsPreferredMissingJson),
+    atsEvaluatedAt: submission.atsEvaluatedAt
+      ? new Date(submission.atsEvaluatedAt).toISOString()
+      : null,
     rejectionReason: submission.rejectionReason ?? "",
     reviewedAt: submission.reviewedAt
       ? new Date(submission.reviewedAt).toISOString()
@@ -162,6 +291,23 @@ const toSubmissionDoc = (
     resumeStoredName: String(data.resumeStoredName ?? ""),
     resumeMimeType: String(data.resumeMimeType ?? "application/pdf"),
     reviewStatus: String(data.reviewStatus ?? "pending"),
+    atsStatus: String(data.atsStatus ?? "none"),
+    atsConfigSignature: String(data.atsConfigSignature ?? ""),
+    atsScore: toOptionalFiniteNumber(data.atsScore),
+    atsMethod: String(data.atsMethod ?? "none"),
+    atsSummary: String(data.atsSummary ?? ""),
+    atsCandidateSummary: String(data.atsCandidateSummary ?? ""),
+    atsConfidenceNotes: String(data.atsConfidenceNotes ?? ""),
+    atsExtractedTextPreview: String(data.atsExtractedTextPreview ?? ""),
+    atsNormalizedSkillsJson: String(data.atsNormalizedSkillsJson ?? "[]"),
+    atsRelevantRolesJson: String(data.atsRelevantRolesJson ?? "[]"),
+    atsEducationJson: String(data.atsEducationJson ?? "[]"),
+    atsYearsOfExperience: toOptionalFiniteNumber(data.atsYearsOfExperience),
+    atsRequiredMatchedJson: String(data.atsRequiredMatchedJson ?? "[]"),
+    atsRequiredMissingJson: String(data.atsRequiredMissingJson ?? "[]"),
+    atsPreferredMatchedJson: String(data.atsPreferredMatchedJson ?? "[]"),
+    atsPreferredMissingJson: String(data.atsPreferredMissingJson ?? "[]"),
+    atsEvaluatedAt: Number(data.atsEvaluatedAt ?? 0),
     rejectionReason: String(data.rejectionReason ?? ""),
     reviewedAt: Number(data.reviewedAt ?? 0),
     reviewedBy: String(data.reviewedBy ?? ""),
@@ -170,6 +316,102 @@ const toSubmissionDoc = (
 };
 
 const toSubmissionRowKey = (id: string) => `submission:${id}`;
+
+const getAtsStatusFromEvaluation = (evaluation: AtsEvaluation): "none" | "success" | "failed" => {
+  if (evaluation.method === "none") {
+    return "none";
+  }
+
+  if (
+    evaluation.candidateSummary === "ATS parsing failed for this CV. The application is still saved."
+    || evaluation.candidateSummary === "Resume text could not be extracted cleanly."
+  ) {
+    return "failed";
+  }
+
+  return "success";
+};
+
+const getQueuedAtsEntityFields = (atsEnabled: boolean) => ({
+  atsStatus: atsEnabled ? "queued" : "none",
+  atsScore: undefined,
+  atsMethod: "none",
+  atsSummary: atsEnabled
+    ? "ATS analysis is queued and will run in the background."
+    : "ATS is not configured for this job.",
+  atsCandidateSummary: "",
+  atsConfidenceNotes: "",
+  atsExtractedTextPreview: "",
+  atsNormalizedSkillsJson: "[]",
+  atsRelevantRolesJson: "[]",
+  atsEducationJson: "[]",
+  atsYearsOfExperience: undefined,
+  atsRequiredMatchedJson: "[]",
+  atsRequiredMissingJson: "[]",
+  atsPreferredMatchedJson: "[]",
+  atsPreferredMissingJson: "[]",
+  atsEvaluatedAt: 0,
+});
+
+const getAtsEntityFields = (evaluation: AtsEvaluation) => ({
+  atsStatus: getAtsStatusFromEvaluation(evaluation),
+  atsScore: evaluation.score ?? undefined,
+  atsMethod: evaluation.method,
+  atsSummary: evaluation.summary,
+  atsCandidateSummary: evaluation.candidateSummary,
+  atsConfidenceNotes: evaluation.confidenceNotes,
+  atsExtractedTextPreview: evaluation.extractedTextPreview,
+  atsNormalizedSkillsJson: JSON.stringify(evaluation.normalizedSkills),
+  atsRelevantRolesJson: JSON.stringify(evaluation.relevantRoles),
+  atsEducationJson: JSON.stringify(evaluation.education),
+  atsYearsOfExperience: evaluation.yearsOfExperience ?? undefined,
+  atsRequiredMatchedJson: JSON.stringify(evaluation.requiredMatched),
+  atsRequiredMissingJson: JSON.stringify(evaluation.requiredMissing),
+  atsPreferredMatchedJson: JSON.stringify(evaluation.preferredMatched),
+  atsPreferredMissingJson: JSON.stringify(evaluation.preferredMissing),
+  atsEvaluatedAt: evaluation.evaluatedAt ? Date.parse(evaluation.evaluatedAt) : 0,
+});
+
+export const canSubmissionAtsBeRecalculated = (
+  submission: Pick<CvSubmissionRecord, "atsStatus" | "atsConfigSignature" | "atsScore">,
+  job: Pick<
+    JobRecord,
+    | "atsEnabled"
+    | "atsRequiredKeywords"
+    | "atsPreferredKeywords"
+    | "title"
+    | "summary"
+    | "requirements"
+    | "department"
+    | "experienceLevel"
+  > | null,
+) => {
+  if (!job?.atsEnabled) {
+    return false;
+  }
+
+  const currentSignature = getJobAtsConfigSignature(job);
+
+  if (!currentSignature) {
+    return false;
+  }
+
+  if (submission.atsStatus === "queued" || submission.atsStatus === "processing") {
+    return false;
+  }
+
+  // Compatibility: older successful ATS records may not have persisted a config signature.
+  // Treat them as up to date unless they failed or are still unscored.
+  if (
+    submission.atsStatus === "success"
+    && submission.atsScore !== null
+    && !submission.atsConfigSignature
+  ) {
+    return false;
+  }
+
+  return submission.atsStatus !== "success" || submission.atsConfigSignature !== currentSignature;
+};
 
 const getMaxRejectedAttemptsForJob = async (jobId: string) => {
   const job = await getJobById(jobId);
@@ -380,6 +622,8 @@ export const createCvSubmission = async (
         resumeStoredName: savedFile.storedFileName,
         resumeMimeType: savedFile.mimeType,
         reviewStatus: "pending",
+        atsConfigSignature: input.jobAtsConfigSignature,
+        ...getQueuedAtsEntityFields(input.atsEnabled),
         rejectionReason: "",
         reviewedAt: 0,
         reviewedBy: "",
@@ -404,6 +648,8 @@ export const createCvSubmission = async (
       resumeStoredName: savedFile.storedFileName,
       resumeMimeType: savedFile.mimeType,
       reviewStatus: "pending",
+      atsConfigSignature: input.jobAtsConfigSignature,
+      ...getQueuedAtsEntityFields(input.atsEnabled),
       rejectionReason: "",
       reviewedAt: 0,
       reviewedBy: "",
@@ -470,9 +716,248 @@ export const updateCvSubmissionReview = async (
     resumeStoredName: existing.resumeStoredName,
     resumeMimeType: existing.resumeMimeType,
     reviewStatus: input.reviewStatus,
+    atsConfigSignature: existing.atsConfigSignature,
+    ...getAtsEntityFields({
+      score: existing.atsScore,
+      method: existing.atsMethod,
+      summary: existing.atsSummary,
+      candidateSummary: existing.atsCandidateSummary,
+      confidenceNotes: existing.atsConfidenceNotes,
+      extractedTextPreview: existing.atsExtractedTextPreview,
+      normalizedSkills: existing.atsNormalizedSkills,
+      relevantRoles: existing.atsRelevantRoles,
+      education: existing.atsEducation,
+      yearsOfExperience: existing.atsYearsOfExperience,
+      requiredMatched: existing.atsRequiredMatched,
+      requiredMissing: existing.atsRequiredMissing,
+      preferredMatched: existing.atsPreferredMatched,
+      preferredMissing: existing.atsPreferredMissing,
+      evaluatedAt: existing.atsEvaluatedAt,
+    }),
     rejectionReason: normalizedReason,
     reviewedAt,
     reviewedBy: input.reviewedBy.trim().toLowerCase(),
+    submittedAt: Date.parse(existing.submittedAt),
+  }, "Replace");
+
+  return getCvSubmissionById(input.id);
+};
+
+export const markCvSubmissionAtsQueued = async (id: string): Promise<CvSubmissionRecord | null> => {
+  const existing = await getCvSubmissionById(id);
+
+  if (!existing) {
+    return null;
+  }
+
+  const tableClient = await getAppTableClient();
+
+  await tableClient.upsertEntity({
+    partitionKey: CV_SCOPE,
+    rowKey: toSubmissionRowKey(id),
+    type: CV_SUBMISSION_TYPE,
+    firstName: existing.firstName,
+    lastName: existing.lastName,
+    email: existing.email,
+    phone: existing.phone,
+    idOrPassportNumber: existing.idOrPassportNumber,
+    jobId: existing.jobId,
+    jobCode: existing.jobCode,
+    jobTitle: existing.jobTitle,
+    jobOpening: existing.jobOpening,
+    resumeOriginalName: existing.resumeOriginalName,
+    resumeStoredName: existing.resumeStoredName,
+    resumeMimeType: existing.resumeMimeType,
+    reviewStatus: existing.reviewStatus,
+    atsConfigSignature: existing.atsConfigSignature,
+    ...getQueuedAtsEntityFields(true),
+    rejectionReason: existing.rejectionReason,
+    reviewedAt: existing.reviewedAt ? Date.parse(existing.reviewedAt) : 0,
+    reviewedBy: existing.reviewedBy,
+    submittedAt: Date.parse(existing.submittedAt),
+  }, "Replace");
+
+  return getCvSubmissionById(id);
+};
+
+export const markCvSubmissionAtsProcessing = async (id: string): Promise<CvSubmissionRecord | null> => {
+  const existing = await getCvSubmissionById(id);
+
+  if (!existing) {
+    return null;
+  }
+
+  const tableClient = await getAppTableClient();
+
+  await tableClient.upsertEntity({
+    partitionKey: CV_SCOPE,
+    rowKey: toSubmissionRowKey(id),
+    type: CV_SUBMISSION_TYPE,
+    firstName: existing.firstName,
+    lastName: existing.lastName,
+    email: existing.email,
+    phone: existing.phone,
+    idOrPassportNumber: existing.idOrPassportNumber,
+    jobId: existing.jobId,
+    jobCode: existing.jobCode,
+    jobTitle: existing.jobTitle,
+    jobOpening: existing.jobOpening,
+    resumeOriginalName: existing.resumeOriginalName,
+    resumeStoredName: existing.resumeStoredName,
+    resumeMimeType: existing.resumeMimeType,
+    reviewStatus: existing.reviewStatus,
+    atsConfigSignature: existing.atsConfigSignature,
+    ...getQueuedAtsEntityFields(true),
+    atsStatus: "processing",
+    atsSummary: "ATS analysis is currently running.",
+    rejectionReason: existing.rejectionReason,
+    reviewedAt: existing.reviewedAt ? Date.parse(existing.reviewedAt) : 0,
+    reviewedBy: existing.reviewedBy,
+    submittedAt: Date.parse(existing.submittedAt),
+  }, "Replace");
+
+  return getCvSubmissionById(id);
+};
+
+export const saveCvSubmissionAtsEvaluation = async (
+  id: string,
+  evaluation: AtsEvaluation,
+  atsConfigSignature: string,
+): Promise<CvSubmissionRecord | null> => {
+  const existing = await getCvSubmissionById(id);
+
+  if (!existing) {
+    return null;
+  }
+
+  const tableClient = await getAppTableClient();
+
+  await tableClient.upsertEntity({
+    partitionKey: CV_SCOPE,
+    rowKey: toSubmissionRowKey(id),
+    type: CV_SUBMISSION_TYPE,
+    firstName: existing.firstName,
+    lastName: existing.lastName,
+    email: existing.email,
+    phone: existing.phone,
+    idOrPassportNumber: existing.idOrPassportNumber,
+    jobId: existing.jobId,
+    jobCode: existing.jobCode,
+    jobTitle: existing.jobTitle,
+    jobOpening: existing.jobOpening,
+    resumeOriginalName: existing.resumeOriginalName,
+    resumeStoredName: existing.resumeStoredName,
+    resumeMimeType: existing.resumeMimeType,
+    reviewStatus: existing.reviewStatus,
+    atsConfigSignature,
+    ...getAtsEntityFields(evaluation),
+    rejectionReason: existing.rejectionReason,
+    reviewedAt: existing.reviewedAt ? Date.parse(existing.reviewedAt) : 0,
+    reviewedBy: existing.reviewedBy,
+    submittedAt: Date.parse(existing.submittedAt),
+  }, "Replace");
+
+  return getCvSubmissionById(id);
+};
+
+export const markCvSubmissionAtsFailed = async (
+  id: string,
+  message: string,
+): Promise<CvSubmissionRecord | null> => {
+  const existing = await getCvSubmissionById(id);
+
+  if (!existing) {
+    return null;
+  }
+
+  const tableClient = await getAppTableClient();
+
+  await tableClient.upsertEntity({
+    partitionKey: CV_SCOPE,
+    rowKey: toSubmissionRowKey(id),
+    type: CV_SUBMISSION_TYPE,
+    firstName: existing.firstName,
+    lastName: existing.lastName,
+    email: existing.email,
+    phone: existing.phone,
+    idOrPassportNumber: existing.idOrPassportNumber,
+    jobId: existing.jobId,
+    jobCode: existing.jobCode,
+    jobTitle: existing.jobTitle,
+    jobOpening: existing.jobOpening,
+    resumeOriginalName: existing.resumeOriginalName,
+    resumeStoredName: existing.resumeStoredName,
+    resumeMimeType: existing.resumeMimeType,
+    reviewStatus: existing.reviewStatus,
+    atsConfigSignature: existing.atsConfigSignature,
+    ...getQueuedAtsEntityFields(true),
+    atsStatus: "failed",
+    atsSummary: message,
+    atsCandidateSummary: message,
+    rejectionReason: existing.rejectionReason,
+    reviewedAt: existing.reviewedAt ? Date.parse(existing.reviewedAt) : 0,
+    reviewedBy: existing.reviewedBy,
+    submittedAt: Date.parse(existing.submittedAt),
+  }, "Replace");
+
+  return getCvSubmissionById(id);
+};
+
+export const updateCvSubmissionAts = async (
+  input: UpdateCvSubmissionAtsInput,
+): Promise<CvSubmissionRecord | null> => {
+  const existing = await getCvSubmissionById(input.id);
+
+  if (!existing) {
+    return null;
+  }
+
+  if (!existing.jobId) {
+    throw new AtsRecalculationError("This application is missing a job reference.");
+  }
+
+  const job = await getJobById(existing.jobId);
+
+  if (!job) {
+    throw new AtsRecalculationError("The related job could not be found for ATS recalculation.");
+  }
+
+  if (!canSubmissionAtsBeRecalculated(existing, job)) {
+    throw new AtsRecalculationError("ATS is already up to date for this application.");
+  }
+
+  const resumeBuffer = await downloadCvUpload(existing.resumeStoredName);
+  const { evaluateResumeAgainstJob } = await import("./ats");
+  const evaluation = await evaluateResumeAgainstJob({
+    job,
+    resumeBuffer,
+  });
+  const atsConfigSignature = getJobAtsConfigSignature(job);
+
+  const tableClient = await getAppTableClient();
+
+  await tableClient.upsertEntity({
+    partitionKey: CV_SCOPE,
+    rowKey: toSubmissionRowKey(input.id),
+    type: CV_SUBMISSION_TYPE,
+    firstName: existing.firstName,
+    lastName: existing.lastName,
+    email: existing.email,
+    phone: existing.phone,
+    idOrPassportNumber: existing.idOrPassportNumber,
+    jobId: existing.jobId,
+    jobCode: existing.jobCode,
+    jobTitle: existing.jobTitle,
+    jobOpening: existing.jobOpening,
+    resumeOriginalName: existing.resumeOriginalName,
+    resumeStoredName: existing.resumeStoredName,
+    resumeMimeType: existing.resumeMimeType,
+    reviewStatus: existing.reviewStatus,
+    atsConfigSignature,
+    ...getAtsEntityFields(evaluation),
+    rejectionReason: existing.rejectionReason,
+    reviewedAt: existing.reviewedAt ? Date.parse(existing.reviewedAt) : 0,
+    reviewedBy: existing.reviewedBy,
     submittedAt: Date.parse(existing.submittedAt),
   }, "Replace");
 

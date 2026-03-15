@@ -18,6 +18,9 @@ export type JobPreviewDraft = {
   salaryRange: string;
   vacancies: string;
   maxRetryAttempts: string;
+  atsEnabled: boolean;
+  atsRequiredKeywords: string;
+  atsPreferredKeywords: string;
   closingDate: string;
   requirements: string;
   benefits: string;
@@ -52,6 +55,19 @@ export const mergeJobPreviewDraft = (
     salaryRange: draft.salaryRange,
     vacancies: Number.isFinite(vacancies) && vacancies > 0 ? vacancies : null,
     maxRetryAttempts: Math.max(0, Number.parseInt(draft.maxRetryAttempts, 10) || 0),
+    atsEnabled: Boolean(draft.atsEnabled),
+    atsRequiredKeywords: draft.atsEnabled
+      ? draft.atsRequiredKeywords
+        .split(/\r?\n|,/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+      : [],
+    atsPreferredKeywords: draft.atsEnabled
+      ? draft.atsPreferredKeywords
+        .split(/\r?\n|,/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+      : [],
     closingDate: draft.closingDate,
     requirements: draft.requirements,
     benefits: draft.benefits,

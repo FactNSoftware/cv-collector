@@ -12,6 +12,8 @@ export type AdminCandidateListItem = CandidateProfile & {
   submissionCount: number;
   latestSubmissionAt: string | null;
   latestReviewStatus: CvReviewStatus | "none";
+  latestAtsStatus: CvSubmissionRecord["atsStatus"];
+  latestAtsScore: number | null;
 };
 
 export type AdminAccountListItem = AdminAccount;
@@ -53,7 +55,26 @@ export const buildAdminCandidateListItems = (
         submissionCount: candidateSubmissions.length,
         latestSubmissionAt: candidateSubmissions[0]?.submittedAt ?? null,
         latestReviewStatus: candidateSubmissions[0]?.reviewStatus ?? "none",
+        latestAtsStatus: candidateSubmissions[0]?.atsStatus ?? "none",
+        latestAtsScore: candidateSubmissions[0]?.atsScore ?? null,
       } satisfies AdminCandidateListItem;
     })
-    .sort((left, right) => left.email.localeCompare(right.email));
+    .sort((left, right) => {
+      const leftScore = left.latestAtsScore ?? -1;
+      const rightScore = right.latestAtsScore ?? -1;
+
+      if (rightScore !== leftScore) {
+        return rightScore - leftScore;
+      }
+
+      if (left.latestSubmissionAt && right.latestSubmissionAt) {
+        const submissionOrder = right.latestSubmissionAt.localeCompare(left.latestSubmissionAt);
+
+        if (submissionOrder !== 0) {
+          return submissionOrder;
+        }
+      }
+
+      return left.email.localeCompare(right.email);
+    });
 };

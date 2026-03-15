@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { enqueueAtsProcessing, triggerAtsQueueProcessing } from "../../../../../lib/ats-queue";
 import { recordAdminAuditEvent } from "../../../../../lib/audit-log";
 import { requireAdminApiSession } from "../../../../../lib/auth-guards";
 import {
@@ -6,6 +7,7 @@ import {
   deleteCvSubmission,
   updateCvSubmissionReview,
   type CvReviewStatus,
+  AtsRecalculationError,
   InvalidApplicationReviewTransitionError,
 } from "../../../../../lib/cv-storage";
 
@@ -80,6 +82,77 @@ export async function PATCH(
     console.error("Failed to update application", error);
     return NextResponse.json(
       { message: "Failed to update application." },
+      { status: 500 },
+    );
+  }
+}
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  const auth = await requireAdminApiSession(request);
+
+  if ("response" in auth) {
+    return auth.response;
+  }
+
+  try {
+    const { id } = await context.params;
+    const existing = await getCvSubmissionById(id);
+
+    if (!existing) {
+      return NextResponse.json({ message: "Application not found." }, { status: 404 });
+    }
+
+    await enqueueAtsProcessing({
+      submissionId: id,
+      reason: "admin_recalculate",
+    });
+    const updated = await getCvSubmissionById(id);
+
+    void triggerAtsQueueProcessing({
+      reason: "admin_recalculate",
+      limit: 2,
+    });
+
+    if (!updated) {
+      return NextResponse.json({ message: "Application not found." }, { status: 404 });
+    }
+
+    await recordAdminAuditEvent({
+      actorEmail: auth.session.email,
+      action: "application.ats_recalculate",
+      targetType: "application",
+      targetId: updated.id,
+      summary: `Recalculated ATS for application ${updated.jobCode} for ${updated.email}`,
+      requestMethod: request.method,
+      requestPath: new URL(request.url).pathname,
+      userAgent: request.headers.get("user-agent") ?? "",
+      details: {
+        candidateEmail: updated.email,
+        jobCode: updated.jobCode,
+        atsScore: updated.atsScore,
+        atsMethod: updated.atsMethod,
+        atsStatus: updated.atsStatus,
+      },
+    });
+
+    return NextResponse.json({
+      message: "ATS recalculation queued successfully.",
+      item: updated,
+    });
+  } catch (error) {
+    if (error instanceof AtsRecalculationError) {
+      return NextResponse.json(
+        { message: error.message },
+        { status: 400 },
+      );
+    }
+
+    console.error("Failed to recalculate ATS", error);
+    return NextResponse.json(
+      { message: "Failed to recalculate ATS." },
       { status: 500 },
     );
   }

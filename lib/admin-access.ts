@@ -4,6 +4,12 @@ import { buildPageInfo, type PageInfo } from "./pagination";
 const ADMIN_SCOPE = "admin";
 const ADMIN_ACCOUNT_TYPE = "account";
 const ADMIN_PERMISSION_TOKEN_ENV = "ADMIN_PERMISSION_TOKEN";
+const ADMIN_PERMISSION_TOKEN_EXPIRES_AT_ENV = "ADMIN_PERMISSION_TOKEN_EXPIRES_AT";
+const ADMIN_BOOTSTRAP_SCOPE = "admin-bootstrap";
+const ADMIN_BOOTSTRAP_ATTEMPT_TYPE = "attempt";
+const BOOTSTRAP_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+const BOOTSTRAP_MAX_ATTEMPTS = 5;
+const BOOTSTRAP_BLOCK_MS = 15 * 60 * 1000;
 
 type AdminAccountEntity = {
   partitionKey: string;
@@ -12,6 +18,17 @@ type AdminAccountEntity = {
   email: string;
   createdAt: number;
   createdBy: string;
+};
+
+type AdminBootstrapAttemptEntity = {
+  partitionKey: string;
+  rowKey: string;
+  type: string;
+  requesterKey: string;
+  attempts: number;
+  firstAttemptAt: number;
+  lastAttemptAt: number;
+  blockedUntil: number;
 };
 
 export type AdminAccount = {
@@ -26,8 +43,11 @@ export type AdminAccountPage = {
 };
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
+const normalizeRequesterKey = (value: string) => value.trim().toLowerCase() || "unknown";
 
 const toRowKey = (email: string) => encodeURIComponent(normalizeEmail(email));
+const toBootstrapAttemptRowKey = (requesterKey: string) =>
+  encodeURIComponent(normalizeRequesterKey(requesterKey));
 
 const toAdminAccount = (entity: AdminAccountEntity): AdminAccount => ({
   email: entity.email,
@@ -47,8 +67,149 @@ export const getAdminPermissionToken = () => {
   return token;
 };
 
-export const isAdminPermissionTokenValid = (providedToken: string) => {
-  return Boolean(providedToken) && providedToken === getAdminPermissionToken();
+const getAdminPermissionTokenExpiry = () => {
+  const value = process.env[ADMIN_PERMISSION_TOKEN_EXPIRES_AT_ENV]?.trim();
+
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+
+  if (!Number.isFinite(parsed)) {
+    throw new Error(
+      `Invalid ${ADMIN_PERMISSION_TOKEN_EXPIRES_AT_ENV} value. Use an ISO-8601 timestamp.`,
+    );
+  }
+
+  return parsed;
+};
+
+const isAdminPermissionTokenCurrentlyValid = (providedToken: string) => {
+  if (!providedToken || providedToken !== getAdminPermissionToken()) {
+    return false;
+  }
+
+  const expiresAt = getAdminPermissionTokenExpiry();
+
+  if (expiresAt !== null && expiresAt <= Date.now()) {
+    return false;
+  }
+
+  return true;
+};
+
+export const hasAnyAdminAccount = async () => {
+  const tableClient = await getAppTableClient();
+  const pages = tableClient.listEntities<AdminAccountEntity>({
+    queryOptions: {
+      filter: `PartitionKey eq '${ADMIN_SCOPE}' and type eq '${ADMIN_ACCOUNT_TYPE}'`,
+    },
+  }).byPage({ maxPageSize: 1 });
+
+  for await (const page of pages) {
+    return [...page].length > 0;
+  }
+
+  return false;
+};
+
+const getAdminBootstrapAttempt = async (requesterKey: string) => {
+  const tableClient = await getAppTableClient();
+
+  try {
+    return await tableClient.getEntity<AdminBootstrapAttemptEntity>(
+      ADMIN_BOOTSTRAP_SCOPE,
+      toBootstrapAttemptRowKey(requesterKey),
+    );
+  } catch (error) {
+    if (isTableNotFoundError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
+};
+
+const upsertAdminBootstrapAttempt = async (entity: AdminBootstrapAttemptEntity) => {
+  const tableClient = await getAppTableClient();
+  await tableClient.upsertEntity(entity, "Replace");
+};
+
+const deleteAdminBootstrapAttempt = async (requesterKey: string) => {
+  const tableClient = await getAppTableClient();
+
+  try {
+    await tableClient.deleteEntity(
+      ADMIN_BOOTSTRAP_SCOPE,
+      toBootstrapAttemptRowKey(requesterKey),
+    );
+  } catch (error) {
+    if (isTableNotFoundError(error)) {
+      return;
+    }
+
+    throw error;
+  }
+};
+
+export const validateAdminBootstrapAttempt = async ({
+  providedToken,
+  requesterKey,
+}: {
+  providedToken: string;
+  requesterKey: string;
+}) => {
+  const normalizedRequesterKey = normalizeRequesterKey(requesterKey);
+  const now = Date.now();
+  const existing = await getAdminBootstrapAttempt(normalizedRequesterKey);
+
+  if (existing && Number(existing.blockedUntil ?? 0) > now) {
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil((Number(existing.blockedUntil) - now) / 1000),
+    );
+    return {
+      ok: false as const,
+      status: 429,
+      message: "Too many failed bootstrap attempts. Try again later.",
+      retryAfterSeconds,
+    };
+  }
+
+  if (isAdminPermissionTokenCurrentlyValid(providedToken.trim())) {
+    await deleteAdminBootstrapAttempt(normalizedRequesterKey);
+
+    return {
+      ok: true as const,
+    };
+  }
+
+  const previousFirstAttemptAt = Number(existing?.firstAttemptAt ?? now);
+  const withinWindow = now - previousFirstAttemptAt < BOOTSTRAP_ATTEMPT_WINDOW_MS;
+  const attempts = withinWindow ? Number(existing?.attempts ?? 0) + 1 : 1;
+  const firstAttemptAt = withinWindow ? previousFirstAttemptAt : now;
+  const blockedUntil = attempts >= BOOTSTRAP_MAX_ATTEMPTS ? now + BOOTSTRAP_BLOCK_MS : 0;
+
+  await upsertAdminBootstrapAttempt({
+    partitionKey: ADMIN_BOOTSTRAP_SCOPE,
+    rowKey: toBootstrapAttemptRowKey(normalizedRequesterKey),
+    type: ADMIN_BOOTSTRAP_ATTEMPT_TYPE,
+    requesterKey: normalizedRequesterKey,
+    attempts,
+    firstAttemptAt,
+    lastAttemptAt: now,
+    blockedUntil,
+  });
+
+  return {
+    ok: false as const,
+    status: blockedUntil > 0 ? 429 : 403,
+    message: blockedUntil > 0
+      ? "Too many failed bootstrap attempts. Try again later."
+      : "Invalid admin permission token.",
+    retryAfterSeconds: blockedUntil > 0 ? Math.ceil(BOOTSTRAP_BLOCK_MS / 1000) : undefined,
+  };
 };
 
 export const getAdminAccountByEmail = async (

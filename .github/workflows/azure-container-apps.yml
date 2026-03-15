@@ -26,6 +26,9 @@ env:
   EMAIL_SENDER_ADDRESS: ${{ secrets.AZURE_EMAIL_SENDER_ADDRESS }}
   AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
   ADMIN_PERMISSION_TOKEN: ${{ secrets.ADMIN_PERMISSION_TOKEN }}
+  ADMIN_PERMISSION_TOKEN_EXPIRES_AT: ${{ secrets.ADMIN_PERMISSION_TOKEN_EXPIRES_AT }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  ATS_OPENAI_MODEL: ${{ secrets.ATS_OPENAI_MODEL }}
   IMAGE_NAME: cv-collector
   NODE_VERSION: 20
 
@@ -89,6 +92,9 @@ jobs:
           EMAIL_SENDER_ADDRESS: ${{ secrets.AZURE_EMAIL_SENDER_ADDRESS }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
           ADMIN_PERMISSION_TOKEN: ${{ secrets.ADMIN_PERMISSION_TOKEN }}
+          ADMIN_PERMISSION_TOKEN_EXPIRES_AT: ${{ secrets.ADMIN_PERMISSION_TOKEN_EXPIRES_AT }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ATS_OPENAI_MODEL: ${{ secrets.ATS_OPENAI_MODEL }}
         with:
           inlineScript: |
             set -euo pipefail
@@ -105,6 +111,21 @@ jobs:
 
             if [ -z "${ADMIN_PERMISSION_TOKEN:-}" ]; then
               echo "ADMIN_PERMISSION_TOKEN GitHub secret is required."
+              exit 1
+            fi
+
+            if [ -z "${ADMIN_PERMISSION_TOKEN_EXPIRES_AT:-}" ]; then
+              echo "ADMIN_PERMISSION_TOKEN_EXPIRES_AT GitHub secret is required."
+              exit 1
+            fi
+
+            if [ -z "${OPENAI_API_KEY:-}" ]; then
+              echo "OPENAI_API_KEY GitHub secret is required."
+              exit 1
+            fi
+
+            if [ -z "${ATS_OPENAI_MODEL:-}" ]; then
+              echo "ATS_OPENAI_MODEL GitHub secret is required."
               exit 1
             fi
 
@@ -150,6 +171,9 @@ jobs:
           EMAIL_SENDER_ADDRESS: ${{ secrets.AZURE_EMAIL_SENDER_ADDRESS }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
           ADMIN_PERMISSION_TOKEN: ${{ secrets.ADMIN_PERMISSION_TOKEN }}
+          ADMIN_PERMISSION_TOKEN_EXPIRES_AT: ${{ secrets.ADMIN_PERMISSION_TOKEN_EXPIRES_AT }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ATS_OPENAI_MODEL: ${{ secrets.ATS_OPENAI_MODEL }}
         with:
           inlineScript: |
             set -euo pipefail
@@ -166,6 +190,7 @@ jobs:
                 --secrets \
                   auth-secret="$AUTH_SECRET" \
                   admin-permission-token="$ADMIN_PERMISSION_TOKEN" \
+                  openai-api-key="$OPENAI_API_KEY" \
                   storage-connection="${{ steps.resolve-runtime-values.outputs.storage_connection_string }}" \
                   communication-connection="${{ steps.resolve-runtime-values.outputs.communication_connection_string }}"
 
@@ -181,7 +206,10 @@ jobs:
                   AZURE_COMMUNICATION_CONNECTION_STRING=secretref:communication-connection \
                   AZURE_EMAIL_SENDER_ADDRESS="$EMAIL_SENDER_ADDRESS" \
                   AUTH_SECRET=secretref:auth-secret \
-                  ADMIN_PERMISSION_TOKEN=secretref:admin-permission-token
+                  ADMIN_PERMISSION_TOKEN=secretref:admin-permission-token \
+                  ADMIN_PERMISSION_TOKEN_EXPIRES_AT="$ADMIN_PERMISSION_TOKEN_EXPIRES_AT" \
+                  OPENAI_API_KEY=secretref:openai-api-key \
+                  ATS_OPENAI_MODEL="$ATS_OPENAI_MODEL"
             else
               az containerapp create \
                 --name "$CONTAINER_APP_NAME" \
@@ -200,6 +228,7 @@ jobs:
                 --secrets \
                   auth-secret="$AUTH_SECRET" \
                   admin-permission-token="$ADMIN_PERMISSION_TOKEN" \
+                  openai-api-key="$OPENAI_API_KEY" \
                   storage-connection="${{ steps.resolve-runtime-values.outputs.storage_connection_string }}" \
                   communication-connection="${{ steps.resolve-runtime-values.outputs.communication_connection_string }}" \
                 --env-vars \
@@ -210,5 +239,8 @@ jobs:
                   AZURE_COMMUNICATION_CONNECTION_STRING=secretref:communication-connection \
                   AZURE_EMAIL_SENDER_ADDRESS="$EMAIL_SENDER_ADDRESS" \
                   AUTH_SECRET=secretref:auth-secret \
-                  ADMIN_PERMISSION_TOKEN=secretref:admin-permission-token
+                  ADMIN_PERMISSION_TOKEN=secretref:admin-permission-token \
+                  ADMIN_PERMISSION_TOKEN_EXPIRES_AT="$ADMIN_PERMISSION_TOKEN_EXPIRES_AT" \
+                  OPENAI_API_KEY=secretref:openai-api-key \
+                  ATS_OPENAI_MODEL="$ATS_OPENAI_MODEL"
             fi

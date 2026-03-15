@@ -1,19 +1,47 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BriefcaseBusiness, Mail, Phone, ShieldCheck } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CandidateProfile } from "../../lib/candidate-profile";
-import type { CvSubmissionRecord } from "../../lib/cv-storage";
+import { canSubmissionAtsBeRecalculated, type CvSubmissionRecord } from "../../lib/cv-storage";
+import type { JobRecord } from "../../lib/jobs";
+import { AtsDetailsModal } from "./AtsDetailsModal";
 import { CandidateCvPreviewModal } from "./CandidateCvPreviewModal";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { PortalShell } from "./PortalShell";
 import { useToast } from "./ToastProvider";
 
+const renderAtsBadge = (submission: Pick<CvSubmissionRecord, "atsStatus" | "atsScore">) => {
+  if (submission.atsStatus === "queued") {
+    return <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-800">ATS queued</span>;
+  }
+
+  if (submission.atsStatus === "processing") {
+    return <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">ATS processing</span>;
+  }
+
+  if (submission.atsStatus === "failed") {
+    return <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-800">ATS failed</span>;
+  }
+
+  if (submission.atsScore !== null) {
+    return (
+      <span className="rounded-full bg-[var(--color-panel-strong)] px-2.5 py-1 text-xs font-semibold text-[var(--color-brand-strong)]">
+        ATS {submission.atsScore}%
+      </span>
+    );
+  }
+
+  return <span className="text-xs text-slate-500">ATS not configured</span>;
+};
+
 type AdminCandidateDetailProps = {
   sessionEmail: string;
   candidate: CandidateProfile;
   submissions: CvSubmissionRecord[];
+  jobsById: Record<string, JobRecord>;
   isAdmin: boolean;
 };
 
@@ -21,10 +49,14 @@ export function AdminCandidateDetail({
   sessionEmail,
   candidate,
   submissions,
+  jobsById,
   isAdmin,
 }: AdminCandidateDetailProps) {
+  const router = useRouter();
   const [items, setItems] = useState(submissions);
+  const [recalculatingAtsId, setRecalculatingAtsId] = useState<string | null>(null);
   const [activePreview, setActivePreview] = useState<CvSubmissionRecord | null>(null);
+  const [activeAtsDetails, setActiveAtsDetails] = useState<CvSubmissionRecord | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const rejectionReasonRef = useRef("");
   const [isConfirmingAction, setIsConfirmingAction] = useState(false);
@@ -39,6 +71,27 @@ export function AdminCandidateDetail({
   }>(null);
   const { showToast } = useToast();
   const fullName = [candidate.firstName, candidate.lastName].filter(Boolean).join(" ") || "Unnamed Candidate";
+
+  useEffect(() => {
+    setItems(submissions);
+  }, [submissions]);
+
+  const hasAtsInFlight = useMemo(
+    () => items.some((item) => item.atsStatus === "queued" || item.atsStatus === "processing"),
+    [items],
+  );
+
+  useEffect(() => {
+    if (!hasAtsInFlight) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      router.refresh();
+    }, 4000);
+
+    return () => window.clearInterval(intervalId);
+  }, [hasAtsInFlight, router]);
 
   const updateReviewStatus = async (
     id: string,
@@ -78,6 +131,35 @@ export function AdminCandidateDetail({
 
     setItems((current) => current.filter((item) => item.id !== id));
     showToast(payload.message || "Application deleted successfully.");
+  };
+
+  const recalculateAts = async (id: string) => {
+    if (recalculatingAtsId === id) {
+      return;
+    }
+
+    setRecalculatingAtsId(id);
+
+    try {
+      const response = await fetch(`/api/admin/applications/${id}`, {
+        method: "POST",
+      });
+      const payload = await response
+        .json()
+        .catch(() => ({ message: "Failed to recalculate ATS." }));
+
+      if (!response.ok) {
+        showToast(payload.message || "Failed to recalculate ATS.", "error");
+        return;
+      }
+
+      setItems((current) => current.map((item) => (item.id === id ? payload.item : item)));
+      setActiveAtsDetails((current) => (current?.id === id ? payload.item : current));
+      showToast(payload.message || "ATS recalculated successfully.");
+      router.refresh();
+    } finally {
+      setRecalculatingAtsId(null);
+    }
   };
 
   return (
@@ -168,6 +250,7 @@ export function AdminCandidateDetail({
                             Reviewed on {new Date(submission.reviewedAt).toLocaleString()}
                           </span>
                         )}
+                        {renderAtsBadge(submission)}
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -214,6 +297,22 @@ export function AdminCandidateDetail({
                           View Job
                         </Link>
                       )}
+                      {canSubmissionAtsBeRecalculated(submission, jobsById[submission.jobId] ?? null) ? (
+                        <button
+                          type="button"
+                          onClick={() => void recalculateAts(submission.id)}
+                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+                        >
+                          {recalculatingAtsId === submission.id ? "Recalculating ATS..." : "Recalculate ATS"}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => setActiveAtsDetails(submission)}
+                        className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+                      >
+                        View ATS
+                      </button>
                       <button
                         type="button"
                         onClick={() => setActivePreview(submission)}
@@ -240,7 +339,7 @@ export function AdminCandidateDetail({
                     </div>
                   </div>
                   <div className="mt-3 rounded-xl bg-white p-3 text-sm text-slate-600">
-                    {submission.resumeOriginalName}
+                    <p>{submission.resumeOriginalName}</p>
                   </div>
                 </article>
               ))}
@@ -306,6 +405,11 @@ export function AdminCandidateDetail({
         downloadUrl={activePreview ? `/api/admin/cv/${activePreview.id}/resume` : null}
         isOpen={Boolean(activePreview)}
         onClose={() => setActivePreview(null)}
+      />
+      <AtsDetailsModal
+        submission={activeAtsDetails}
+        isOpen={Boolean(activeAtsDetails)}
+        onClose={() => setActiveAtsDetails(null)}
       />
     </PortalShell>
   );

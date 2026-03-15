@@ -28,7 +28,12 @@ export const useToast = () => {
   const value = useContext(ToastContext);
 
   if (!value) {
-    throw new Error("useToast must be used within ToastProvider.");
+    return {
+      showToast: (message: string, tone: ToastTone = "success") => {
+        const method = tone === "error" ? console.error : tone === "warning" ? console.warn : console.info;
+        method("[ToastFallback]", message);
+      },
+    };
   }
 
   return value;

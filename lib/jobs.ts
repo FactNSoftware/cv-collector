@@ -60,6 +60,9 @@ type JobEntity = {
   salaryRange?: string;
   vacancies?: number;
   maxRetryAttempts?: number;
+  atsEnabled?: boolean;
+  atsRequiredKeywordsJson?: string;
+  atsPreferredKeywordsJson?: string;
   closingDate?: string;
   requirements?: string;
   benefits?: string;
@@ -83,6 +86,9 @@ export type JobRecord = {
   salaryRange: string;
   vacancies: number | null;
   maxRetryAttempts: number;
+  atsEnabled: boolean;
+  atsRequiredKeywords: string[];
+  atsPreferredKeywords: string[];
   closingDate: string;
   requirements: string;
   benefits: string;
@@ -110,6 +116,9 @@ export type UpsertJobInput = {
   salaryRange?: string;
   vacancies?: number | null;
   maxRetryAttempts?: number | null;
+  atsEnabled?: boolean;
+  atsRequiredKeywords?: string[];
+  atsPreferredKeywords?: string[];
   closingDate?: string;
   requirements?: string;
   benefits?: string;
@@ -198,6 +207,21 @@ const normalizeMaxRetryAttempts = (value: number | null | undefined) => {
   return Math.floor(value);
 };
 
+const parseKeywordJson = (value: string | undefined) => {
+  if (!value) {
+    return [] as string[];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      : [];
+  } catch {
+    return [];
+  }
+};
+
 const buildJobCode = (sequence: number) => {
   return `${JOB_CODE_PREFIX}${String(sequence).padStart(3, "0")}`;
 };
@@ -227,6 +251,9 @@ const toJobRecord = (entity: JobEntity): JobRecord => {
     salaryRange: normalizeText(entity.salaryRange),
     vacancies: normalizeVacancies(entity.vacancies),
     maxRetryAttempts: normalizeMaxRetryAttempts(entity.maxRetryAttempts),
+    atsEnabled: Boolean(entity.atsEnabled),
+    atsRequiredKeywords: parseKeywordJson(entity.atsRequiredKeywordsJson),
+    atsPreferredKeywords: parseKeywordJson(entity.atsPreferredKeywordsJson),
     closingDate: normalizeText(entity.closingDate),
     requirements: normalizeText(entity.requirements),
     benefits: normalizeText(entity.benefits),
@@ -248,6 +275,37 @@ export const getSalaryDisplay = (
   }
 
   return `${job.salaryCurrency} ${job.salaryRange}`;
+};
+
+export const getJobAtsConfigSignature = (
+  job: Pick<
+    JobRecord,
+    | "atsEnabled"
+    | "atsRequiredKeywords"
+    | "atsPreferredKeywords"
+    | "title"
+    | "summary"
+    | "requirements"
+    | "department"
+    | "experienceLevel"
+  >,
+) => {
+  if (!job.atsEnabled) {
+    return "";
+  }
+
+  const payload = JSON.stringify({
+    atsEnabled: job.atsEnabled,
+    required: [...job.atsRequiredKeywords].sort((left, right) => left.localeCompare(right)),
+    preferred: [...job.atsPreferredKeywords].sort((left, right) => left.localeCompare(right)),
+    title: job.title,
+    summary: job.summary,
+    requirements: job.requirements,
+    department: job.department,
+    experienceLevel: job.experienceLevel,
+  });
+
+  return payload;
 };
 
 export const listJobs = async (): Promise<JobRecord[]> => {
@@ -359,6 +417,9 @@ export const upsertJob = async (input: UpsertJobInput): Promise<JobRecord> => {
     salaryRange: normalizeText(input.salaryRange),
     vacancies: normalizeVacancies(input.vacancies) ?? undefined,
     maxRetryAttempts: normalizeMaxRetryAttempts(input.maxRetryAttempts),
+    atsEnabled: Boolean(input.atsEnabled),
+    atsRequiredKeywordsJson: JSON.stringify(input.atsEnabled ? (input.atsRequiredKeywords ?? []) : []),
+    atsPreferredKeywordsJson: JSON.stringify(input.atsEnabled ? (input.atsPreferredKeywords ?? []) : []),
     closingDate: normalizeText(input.closingDate),
     requirements: normalizeText(input.requirements),
     benefits: normalizeText(input.benefits),

@@ -1,35 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useSyncExternalStore } from "react";
 
 export type ViewMode = "card" | "table";
 
+const subscribe = (callback: () => void) => {
+  window.addEventListener("storage", callback);
+  return () => window.removeEventListener("storage", callback);
+};
+
 export function usePersistedViewMode(storageKey: string, initialMode: ViewMode = "card") {
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    if (typeof window === "undefined") {
-      return initialMode;
-    }
-
-    try {
-      const saved = window.localStorage.getItem(storageKey);
-      if (saved === "card" || saved === "table") {
-        return saved;
+  const viewMode = useSyncExternalStore(
+    subscribe,
+    () => {
+      try {
+        const saved = window.localStorage.getItem(storageKey);
+        return saved === "card" || saved === "table" ? saved : initialMode;
+      } catch {
+        return initialMode;
       }
-    } catch {
-      // Ignore storage failures and keep the default mode.
-    }
-
-    return initialMode;
-  });
+    },
+    () => initialMode,
+  );
 
   const updateViewMode = (nextMode: ViewMode) => {
-    setViewMode(nextMode);
-
     try {
       window.localStorage.setItem(storageKey, nextMode);
     } catch {
-      // Ignore storage failures and still update local state.
+      // Ignore storage failures and still allow the next render to use the current in-memory value.
     }
+
+    window.dispatchEvent(new Event("storage"));
   };
 
   return {

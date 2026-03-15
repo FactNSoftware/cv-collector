@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { PdfValidationError } from "../../../lib/cv-file-service";
+import { enqueueAtsProcessing, triggerAtsQueueProcessing } from "../../../lib/ats-queue";
 import { requireApiSession } from "../../../lib/auth-guards";
 import {
   createCvSubmission,
@@ -7,7 +8,7 @@ import {
   listCvSubmissionsPage,
 } from "../../../lib/cv-storage";
 import { candidateProfileSchema } from "../../../lib/candidate-profile-validation";
-import { getJobDisplayLabel, listPublishedJobs } from "../../../lib/jobs";
+import { getJobAtsConfigSignature, getJobDisplayLabel, listPublishedJobs } from "../../../lib/jobs";
 import { getCursorParam, getPageLimit } from "../../../lib/pagination";
 
 export const runtime = "nodejs";
@@ -146,6 +147,8 @@ export async function POST(request: Request) {
       );
     }
 
+    const resumeBuffer = Buffer.from(await resume.arrayBuffer());
+
     const created = await createCvSubmission({
       ...values,
       ...parsedProfile.data,
@@ -154,8 +157,21 @@ export async function POST(request: Request) {
       jobOpening: getJobDisplayLabel(matchingJob),
       resumeOriginalName: resume.name || "resume.pdf",
       resumeMimeType: resume.type,
-      resumeBuffer: Buffer.from(await resume.arrayBuffer()),
+      resumeBuffer,
+      jobAtsConfigSignature: getJobAtsConfigSignature(matchingJob),
+      atsEnabled: matchingJob.atsEnabled,
     });
+
+    if (matchingJob.atsEnabled) {
+      await enqueueAtsProcessing({
+        submissionId: created.id,
+        reason: "submission",
+      });
+      void triggerAtsQueueProcessing({
+        reason: "submission",
+        limit: 2,
+      });
+    }
 
     return NextResponse.json(
       {
@@ -171,6 +187,8 @@ export async function POST(request: Request) {
           resumeOriginalName: created.resumeOriginalName,
           resumeDownloadUrl: `/api/cv/${created.id}/resume`,
           reviewStatus: created.reviewStatus,
+          atsScore: created.atsScore,
+          atsSummary: created.atsSummary,
           rejectionReason: created.rejectionReason,
           reviewedAt: created.reviewedAt,
           submittedAt: created.submittedAt,

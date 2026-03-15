@@ -167,6 +167,25 @@ export function AdminCandidatesIndex({
         );
       },
     },
+    {
+      accessorKey: "latestAtsScore",
+      header: "ATS",
+      cell: ({ row }) => (
+        row.original.latestAtsStatus === "queued" ? (
+          <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-800">Queued</span>
+        ) : row.original.latestAtsStatus === "processing" ? (
+          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Processing</span>
+        ) : row.original.latestAtsStatus === "failed" ? (
+          <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-800">Failed</span>
+        ) : row.original.latestAtsScore === null ? (
+          <span className="text-xs text-[var(--color-muted)]">Not scored</span>
+        ) : (
+          <span className="rounded-full bg-[var(--color-panel-strong)] px-2.5 py-1 text-xs font-semibold text-[var(--color-brand-strong)]">
+            {row.original.latestAtsScore}%
+          </span>
+        )
+      ),
+    },
   ], []);
 
   return (
