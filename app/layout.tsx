@@ -4,8 +4,13 @@ import { NavigationLoadingProvider } from "./components/NavigationLoadingProvide
 import { ToastProvider } from "./components/ToastProvider";
 
 export const metadata: Metadata = {
-  title: "CV Collector",
-  description: "OTP login and CV upload portal for candidate intake.",
+  title: "FactN Job Portal",
+  description: "Candidate and admin hiring portal for OTP login, job applications, and CV review.",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
