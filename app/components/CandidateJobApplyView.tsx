@@ -17,6 +17,7 @@ type CandidateJobApplyViewProps = {
   initialProfile: CandidateProfile;
   job: JobRecord;
   existingSubmission: CvSubmissionRecord | null;
+  rejectedAttempts: CvSubmissionRecord[];
 };
 
 type ProfileValues = {
@@ -47,6 +48,7 @@ export function CandidateJobApplyView({
   initialProfile,
   job,
   existingSubmission,
+  rejectedAttempts,
 }: CandidateJobApplyViewProps) {
   const savedProfileValues = toProfileValues(initialProfile);
   const [profileValues, setProfileValues] = useState<ProfileValues>(toProfileValues(initialProfile));
@@ -189,6 +191,11 @@ export function CandidateJobApplyView({
       return;
     }
 
+    if (hasReachedRejectedAttemptLimit) {
+      showToast(attemptLimitMessage, "warning");
+      return;
+    }
+
     if (!resume) {
       showToast("CV is required. Please upload your resume as a PDF.", "warning");
       return;
@@ -250,6 +257,11 @@ export function CandidateJobApplyView({
   const lastNameError = getProfileFieldError("lastName");
   const phoneError = getProfileFieldError("phone");
   const idOrPassportNumberError = getProfileFieldError("idOrPassportNumber");
+  const maxRejectedAttempts = (job.maxRetryAttempts ?? 0) + 1;
+  const hasReachedRejectedAttemptLimit = rejectedAttempts.length >= maxRejectedAttempts;
+  const attemptLimitMessage = maxRejectedAttempts <= 1
+    ? "This job does not allow reapplying after a rejection."
+    : `You have reached the maximum of ${maxRejectedAttempts} rejected attempts for this job.`;
 
   return (
     <>
@@ -304,6 +316,42 @@ export function CandidateJobApplyView({
               >
                 {isWithdrawing ? "Withdrawing..." : "Withdraw Application"}
               </button>
+            </div>
+          </div>
+        )}
+
+        {!submission && rejectedAttempts.length > 0 && (
+          <div className="mt-5 rounded-[24px] border border-rose-200 bg-rose-50 p-5">
+            <p className="text-sm font-semibold text-rose-900">Previous rejected attempts</p>
+            <p className="mt-2 text-sm leading-6 text-rose-800">
+              {hasReachedRejectedAttemptLimit
+                ? `${attemptLimitMessage} New applications are no longer allowed.`
+                : "You can apply again for this job. Your previous rejected submissions are shown below for reference."}
+            </p>
+            <div className="mt-4 space-y-3">
+              {rejectedAttempts.map((attempt) => (
+                <div key={attempt.id} className="rounded-2xl border border-rose-200 bg-white px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-800">
+                      Rejected
+                    </span>
+                    {attempt.reviewedAt ? (
+                      <span className="text-xs text-[var(--color-muted)]">
+                        Reviewed on {new Date(attempt.reviewedAt).toLocaleString()}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 text-sm text-[var(--color-muted)]">
+                    Submitted on {new Date(attempt.submittedAt).toLocaleString()}
+                  </p>
+                  <p className="mt-1 text-sm text-[var(--color-muted)]">{attempt.resumeOriginalName}</p>
+                  {attempt.rejectionReason ? (
+                    <p className="mt-2 text-sm text-rose-800">
+                      <span className="font-medium">Reason:</span> {attempt.rejectionReason}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -378,14 +426,16 @@ export function CandidateJobApplyView({
 
         <button
           type="submit"
-          disabled={isSubmitting || Boolean(submission) || !resume}
+          disabled={isSubmitting || Boolean(submission) || !resume || hasReachedRejectedAttemptLimit}
           className="theme-btn-primary mt-5 flex h-12 w-full items-center justify-center rounded-2xl text-sm font-medium disabled:opacity-70"
         >
           {submission
             ? "Already Applied"
-            : isSubmitting
-              ? "Submitting..."
-              : `Apply for ${job.code}`}
+            : hasReachedRejectedAttemptLimit
+              ? "Reapply Not Available"
+              : isSubmitting
+                ? "Submitting..."
+                : `Apply for ${job.code}`}
         </button>
 
         <p className="mt-4 text-xs leading-5 text-[var(--color-muted)]">

@@ -8,6 +8,7 @@ import {
   isTableConflictError,
   isTableNotFoundError,
 } from "./azure-tables";
+import { getJobById } from "./jobs";
 import { buildPageInfo, type PageInfo } from "./pagination";
 
 const CV_SCOPE = "cv";
@@ -36,6 +37,7 @@ export type CvSubmissionRecord = {
   resumeStoredName: string;
   resumeMimeType: string;
   reviewStatus: CvReviewStatus;
+  rejectionReason: string;
   reviewedAt: string | null;
   reviewedBy: string;
   submittedAt: string;
@@ -65,12 +67,20 @@ type UpdateCvSubmissionReviewInput = {
   id: string;
   reviewStatus: CvReviewStatus;
   reviewedBy: string;
+  rejectionReason?: string;
 };
 
 export class DuplicateApplicantError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "DuplicateApplicantError";
+  }
+}
+
+export class InvalidApplicationReviewTransitionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidApplicationReviewTransitionError";
   }
 }
 
@@ -91,6 +101,7 @@ type CvSubmissionDocument = {
   resumeStoredName: string;
   resumeMimeType: string;
   reviewStatus?: string;
+  rejectionReason?: string;
   reviewedAt?: number;
   reviewedBy?: string;
   submittedAt: number;
@@ -116,6 +127,7 @@ const toRecord = (submission: CvSubmissionDocument): CvSubmissionRecord => {
     resumeStoredName: submission.resumeStoredName,
     resumeMimeType: submission.resumeMimeType,
     reviewStatus: normalizeReviewStatus(submission.reviewStatus),
+    rejectionReason: submission.rejectionReason ?? "",
     reviewedAt: submission.reviewedAt
       ? new Date(submission.reviewedAt).toISOString()
       : null,
@@ -150,6 +162,7 @@ const toSubmissionDoc = (
     resumeStoredName: String(data.resumeStoredName ?? ""),
     resumeMimeType: String(data.resumeMimeType ?? "application/pdf"),
     reviewStatus: String(data.reviewStatus ?? "pending"),
+    rejectionReason: String(data.rejectionReason ?? ""),
     reviewedAt: Number(data.reviewedAt ?? 0),
     reviewedBy: String(data.reviewedBy ?? ""),
     submittedAt,
@@ -157,6 +170,11 @@ const toSubmissionDoc = (
 };
 
 const toSubmissionRowKey = (id: string) => `submission:${id}`;
+
+const getMaxRejectedAttemptsForJob = async (jobId: string) => {
+  const job = await getJobById(jobId);
+  return (job?.maxRetryAttempts ?? 0) + 1;
+};
 
 export const listCvSubmissions = async (): Promise<CvSubmissionRecord[]> => {
   const tableClient = await getAppTableClient();
@@ -202,6 +220,25 @@ export const listCvSubmissionsByJobId = async (
 
   const submissions = await listCvSubmissions();
   return submissions.filter((submission) => submission.jobId === normalizedJobId);
+};
+
+export const listLatestCvSubmissionsByJobId = async (
+  jobId: string,
+): Promise<CvSubmissionRecord[]> => {
+  const submissions = await listCvSubmissionsByJobId(jobId);
+  const latestByEmail = new Map<string, CvSubmissionRecord>();
+
+  for (const submission of submissions) {
+    const existing = latestByEmail.get(submission.email);
+
+    if (!existing || new Date(submission.submittedAt).getTime() > new Date(existing.submittedAt).getTime()) {
+      latestByEmail.set(submission.email, submission);
+    }
+  }
+
+  return [...latestByEmail.values()].sort(
+    (left, right) => new Date(right.submittedAt).getTime() - new Date(left.submittedAt).getTime(),
+  );
 };
 
 export const listCvSubmissionsPage = async ({
@@ -290,10 +327,26 @@ export const createCvSubmission = async (
 ): Promise<CvSubmissionRecord> => {
   const normalizedEmail = input.email.trim().toLowerCase();
   const existingSubmissions = await listCvSubmissionsByEmail(normalizedEmail);
+  const maxRejectedAttemptsForJob = await getMaxRejectedAttemptsForJob(input.jobId);
+  const rejectedAttemptsForJob = existingSubmissions.filter(
+    (submission) => submission.jobId === input.jobId && submission.reviewStatus === "rejected",
+  );
 
-  if (existingSubmissions.some((submission) => submission.jobId === input.jobId)) {
+  if (existingSubmissions.some((submission) => submission.jobId === input.jobId && submission.reviewStatus !== "rejected")) {
     throw new DuplicateApplicantError(
-      "You have already applied for this job. Withdraw the current application to apply again.",
+      "You already have an active application for this job. Withdraw it before applying again.",
+    );
+  }
+
+  if (rejectedAttemptsForJob.length >= maxRejectedAttemptsForJob) {
+    if (maxRejectedAttemptsForJob <= 1) {
+      throw new DuplicateApplicantError(
+        "This job does not allow reapplying after a rejection.",
+      );
+    }
+
+    throw new DuplicateApplicantError(
+      `You have reached the maximum of ${maxRejectedAttemptsForJob} rejected attempts for this job.`,
     );
   }
 
@@ -327,6 +380,7 @@ export const createCvSubmission = async (
         resumeStoredName: savedFile.storedFileName,
         resumeMimeType: savedFile.mimeType,
         reviewStatus: "pending",
+        rejectionReason: "",
         reviewedAt: 0,
         reviewedBy: "",
         submittedAt,
@@ -350,6 +404,7 @@ export const createCvSubmission = async (
       resumeStoredName: savedFile.storedFileName,
       resumeMimeType: savedFile.mimeType,
       reviewStatus: "pending",
+      rejectionReason: "",
       reviewedAt: 0,
       reviewedBy: "",
       submittedAt,
@@ -363,7 +418,7 @@ export const createCvSubmission = async (
 
     if (isTableConflictError(error)) {
       throw new DuplicateApplicantError(
-        "You have already applied for this job. Withdraw the current application to apply again.",
+        "You already have an active application for this job. Withdraw it before applying again.",
       );
     }
 
@@ -380,8 +435,23 @@ export const updateCvSubmissionReview = async (
     return null;
   }
 
+  if (existing.reviewStatus === "accepted" && input.reviewStatus !== "accepted") {
+    throw new InvalidApplicationReviewTransitionError(
+      "Accepted applications cannot be changed to another status.",
+    );
+  }
+
+  if (existing.reviewStatus === "rejected" && input.reviewStatus !== "rejected") {
+    throw new InvalidApplicationReviewTransitionError(
+      "Rejected applications cannot be changed to another status.",
+    );
+  }
+
   const tableClient = await getAppTableClient();
   const reviewedAt = Date.now();
+  const normalizedReason = input.reviewStatus === "rejected"
+    ? (input.rejectionReason ?? "").trim()
+    : "";
 
   await tableClient.upsertEntity({
     partitionKey: CV_SCOPE,
@@ -400,6 +470,7 @@ export const updateCvSubmissionReview = async (
     resumeStoredName: existing.resumeStoredName,
     resumeMimeType: existing.resumeMimeType,
     reviewStatus: input.reviewStatus,
+    rejectionReason: normalizedReason,
     reviewedAt,
     reviewedBy: input.reviewedBy.trim().toLowerCase(),
     submittedAt: Date.parse(existing.submittedAt),

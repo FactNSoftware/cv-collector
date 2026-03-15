@@ -20,6 +20,7 @@ type JobPayload = {
   salaryCurrency?: string;
   salaryRange?: string;
   vacancies?: number | null;
+  maxRetryAttempts?: number | null;
   closingDate?: string;
   requirements?: string;
   benefits?: string;
@@ -98,6 +99,7 @@ export async function POST(request: Request) {
       salaryCurrency: body.salaryCurrency ?? "LKR",
       salaryRange: body.salaryRange ?? "",
       vacancies: typeof body.vacancies === "number" ? body.vacancies : null,
+      maxRetryAttempts: typeof body.maxRetryAttempts === "number" ? body.maxRetryAttempts : 0,
       closingDate: body.closingDate ?? "",
       requirements: body.requirements ?? "",
       benefits: body.benefits ?? "",
@@ -117,6 +119,7 @@ export async function POST(request: Request) {
         jobCode: job.code,
         title: job.title,
         isPublished: job.isPublished,
+        maxRetryAttempts: job.maxRetryAttempts,
       },
     });
 

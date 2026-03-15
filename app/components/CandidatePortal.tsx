@@ -103,8 +103,29 @@ export function CandidatePortal({
                   Submitted on {new Date(latestSubmission.submittedAt).toLocaleString()}
                 </p>
                 <div className="mt-5 rounded-[24px] border border-[var(--color-border)] bg-white p-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                      latestSubmission.reviewStatus === "accepted"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : latestSubmission.reviewStatus === "rejected"
+                          ? "bg-rose-100 text-rose-800"
+                          : "bg-amber-100 text-amber-800"
+                    }`}>
+                      {latestSubmission.reviewStatus.charAt(0).toUpperCase() + latestSubmission.reviewStatus.slice(1)}
+                    </span>
+                    {latestSubmission.reviewedAt ? (
+                      <span className="text-xs text-[var(--color-muted)]">
+                        Reviewed on {new Date(latestSubmission.reviewedAt).toLocaleString()}
+                      </span>
+                    ) : null}
+                  </div>
                   <p className="text-sm font-medium text-[var(--color-ink)]">{latestSubmission.jobOpening}</p>
                   <p className="mt-2 text-sm text-[var(--color-muted)]">{latestSubmission.resumeOriginalName}</p>
+                  {latestSubmission.reviewStatus === "rejected" && latestSubmission.rejectionReason ? (
+                    <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                      <span className="font-medium">Rejection reason:</span> {latestSubmission.rejectionReason}
+                    </div>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => setActivePreview(latestSubmission)}

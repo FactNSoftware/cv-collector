@@ -7,7 +7,7 @@ import {
 } from "../../../../../../lib/cv-file-service";
 import { requireAdminApiSession } from "../../../../../../lib/auth-guards";
 import { getJobById } from "../../../../../../lib/jobs";
-import { listCvSubmissionsByJobId } from "../../../../../../lib/cv-storage";
+import { listLatestCvSubmissionsByJobId } from "../../../../../../lib/cv-storage";
 
 export const runtime = "nodejs";
 
@@ -29,7 +29,7 @@ export async function GET(
     const { id } = await context.params;
     const [job, submissions] = await Promise.all([
       getJobById(id),
-      listCvSubmissionsByJobId(id),
+      listLatestCvSubmissionsByJobId(id),
     ]);
 
     if (!job) {

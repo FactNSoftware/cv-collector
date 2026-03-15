@@ -35,6 +35,8 @@ export const SALARY_CURRENCIES = [
   "USD",
 ] as const;
 
+export const DEFAULT_JOB_MAX_RETRY_ATTEMPTS = 0;
+
 export type EmploymentType = (typeof EMPLOYMENT_TYPES)[number];
 export type WorkplaceType = (typeof WORKPLACE_TYPES)[number];
 export type ExperienceLevel = (typeof EXPERIENCE_LEVELS)[number];
@@ -57,6 +59,7 @@ type JobEntity = {
   salaryCurrency?: string;
   salaryRange?: string;
   vacancies?: number;
+  maxRetryAttempts?: number;
   closingDate?: string;
   requirements?: string;
   benefits?: string;
@@ -79,6 +82,7 @@ export type JobRecord = {
   salaryCurrency: SalaryCurrency;
   salaryRange: string;
   vacancies: number | null;
+  maxRetryAttempts: number;
   closingDate: string;
   requirements: string;
   benefits: string;
@@ -105,6 +109,7 @@ export type UpsertJobInput = {
   salaryCurrency?: string;
   salaryRange?: string;
   vacancies?: number | null;
+  maxRetryAttempts?: number | null;
   closingDate?: string;
   requirements?: string;
   benefits?: string;
@@ -185,6 +190,14 @@ const normalizeVacancies = (value: number | null | undefined) => {
   return Math.floor(value);
 };
 
+const normalizeMaxRetryAttempts = (value: number | null | undefined) => {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return DEFAULT_JOB_MAX_RETRY_ATTEMPTS;
+  }
+
+  return Math.floor(value);
+};
+
 const buildJobCode = (sequence: number) => {
   return `${JOB_CODE_PREFIX}${String(sequence).padStart(3, "0")}`;
 };
@@ -213,6 +226,7 @@ const toJobRecord = (entity: JobEntity): JobRecord => {
     salaryCurrency: normalizeSalaryCurrency(entity.salaryCurrency),
     salaryRange: normalizeText(entity.salaryRange),
     vacancies: normalizeVacancies(entity.vacancies),
+    maxRetryAttempts: normalizeMaxRetryAttempts(entity.maxRetryAttempts),
     closingDate: normalizeText(entity.closingDate),
     requirements: normalizeText(entity.requirements),
     benefits: normalizeText(entity.benefits),
@@ -344,6 +358,7 @@ export const upsertJob = async (input: UpsertJobInput): Promise<JobRecord> => {
     salaryCurrency: normalizeSalaryCurrency(input.salaryCurrency),
     salaryRange: normalizeText(input.salaryRange),
     vacancies: normalizeVacancies(input.vacancies) ?? undefined,
+    maxRetryAttempts: normalizeMaxRetryAttempts(input.maxRetryAttempts),
     closingDate: normalizeText(input.closingDate),
     requirements: normalizeText(input.requirements),
     benefits: normalizeText(input.benefits),

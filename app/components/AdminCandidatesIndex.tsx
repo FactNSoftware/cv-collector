@@ -57,19 +57,20 @@ export function AdminCandidatesIndex({
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [tablePageSize, setTablePageSize] = useState(initialPageInfo.limit);
   const { viewMode, setViewMode } = usePersistedViewMode("admin-candidates-view-mode", "card");
-  const resetKey = `${searchQuery}|${statusFilter}`;
+  const resetKey = `${searchQuery}|${statusFilter}|${tablePageSize}`;
 
   const fetchPage = async (cursor?: string) => {
     const response = await fetch(`/api/admin/users?${createQueryString({
-      limit: initialPageInfo.limit,
+      limit: tablePageSize,
       cursor,
       searchQuery,
       statusFilter,
     })}`);
     const payload = await response.json().catch(() => ({
       items: [],
-      pageInfo: { limit: initialPageInfo.limit, nextCursor: null, hasMore: false },
+      pageInfo: { limit: tablePageSize, nextCursor: null, hasMore: false },
     }));
 
     if (!response.ok) {
@@ -210,10 +211,12 @@ export function AdminCandidatesIndex({
             isLoading={isLoading}
             emptyMessage="No candidates match the current filters."
             pageIndex={pageIndex}
+            pageSize={tablePageSize}
             canPreviousPage={canPreviousPage}
             canNextPage={canNextPage}
             onPreviousPage={goToPreviousPage}
             onNextPage={goToNextPage}
+            onPageSizeChange={setTablePageSize}
             onRowClick={(candidate) => router.push(`/admin/candidates/${encodeURIComponent(candidate.email)}`)}
           />
         ) : (

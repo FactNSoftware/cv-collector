@@ -138,6 +138,11 @@ export function CandidateApplicationsHistory({
                           Reviewed on {new Date(submission.reviewedAt).toLocaleString()}
                         </span>
                       )}
+                      {submission.reviewStatus === "rejected" && submission.rejectionReason ? (
+                        <span className="text-xs text-[var(--color-muted)]">
+                          Reason: {submission.rejectionReason}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -150,8 +155,13 @@ export function CandidateApplicationsHistory({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setPendingWithdrawId(submission.id)}
-                      className="rounded-2xl border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700"
+                      onClick={() => {
+                        if (submission.reviewStatus !== "rejected") {
+                          setPendingWithdrawId(submission.id);
+                        }
+                      }}
+                      disabled={submission.reviewStatus === "rejected"}
+                      className="rounded-2xl border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Withdraw
                     </button>

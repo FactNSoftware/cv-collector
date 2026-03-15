@@ -39,6 +39,7 @@ const EMPTY_JOB_FORM: JobFormState = {
   salaryCurrency: "LKR",
   salaryRange: "",
   vacancies: "1",
+  maxRetryAttempts: "0",
   closingDate: "",
   requirements: "",
   benefits: "",
@@ -57,6 +58,7 @@ const toJobFormState = (job: JobRecord): JobFormState => ({
   salaryCurrency: job.salaryCurrency,
   salaryRange: job.salaryRange,
   vacancies: job.vacancies ? String(job.vacancies) : "1",
+  maxRetryAttempts: String(job.maxRetryAttempts ?? 0),
   closingDate: job.closingDate,
   requirements: job.requirements,
   benefits: job.benefits,
@@ -96,6 +98,7 @@ export function JobEditorForm({
           body: JSON.stringify({
             ...jobForm,
             vacancies: Number(jobForm.vacancies) || 1,
+            maxRetryAttempts: Math.max(0, Number(jobForm.maxRetryAttempts) || 0),
           }),
         },
       );
@@ -285,6 +288,19 @@ export function JobEditorForm({
               <label className="block">
                 <span className="mb-2 block text-sm font-semibold text-slate-800">Open positions</span>
                 <input type="number" min={1} value={jobForm.vacancies} onChange={(event) => setJobForm((current) => ({ ...current, vacancies: event.target.value }))} className="h-12 w-full rounded-xl border border-[var(--color-border)] bg-white px-4 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]" />
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold text-slate-800">Retry attempts after rejection</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={jobForm.maxRetryAttempts}
+                  onChange={(event) => setJobForm((current) => ({ ...current, maxRetryAttempts: event.target.value }))}
+                  className="h-12 w-full rounded-xl border border-[var(--color-border)] bg-white px-4 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]"
+                />
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  Default is 0. If this job is rejected once, the candidate cannot apply again unless you allow retries here.
+                </p>
               </label>
               <label className="block">
                 <span className="mb-2 block text-sm font-semibold text-slate-800">Closing date</span>

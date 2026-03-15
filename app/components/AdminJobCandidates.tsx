@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FileArchive } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { CvSubmissionRecord } from "../../lib/cv-storage";
 import type { JobRecord } from "../../lib/jobs";
 import { CandidateCvPreviewModal } from "./CandidateCvPreviewModal";
@@ -24,11 +24,16 @@ export function AdminJobCandidates({
   const [items, setItems] = useState(submissions);
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
   const [activePreview, setActivePreview] = useState<CvSubmissionRecord | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const rejectionReasonRef = useRef("");
+  const [isConfirmingAction, setIsConfirmingAction] = useState(false);
   const [confirmAction, setConfirmAction] = useState<null | {
     title: string;
     message: string;
     confirmLabel: string;
+    loadingLabel?: string;
     tone?: "danger" | "warning" | "neutral";
+    requiresReason?: boolean;
     onConfirm: () => Promise<void>;
   }>(null);
   const { showToast } = useToast();
@@ -36,11 +41,12 @@ export function AdminJobCandidates({
   const updateReviewStatus = async (
     id: string,
     reviewStatus: "accepted" | "rejected" | "pending",
+    rejectionReasonValue?: string,
   ) => {
     const response = await fetch(`/api/admin/applications/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reviewStatus }),
+      body: JSON.stringify({ reviewStatus, rejectionReason: rejectionReasonValue }),
     });
     const payload = await response
       .json()
@@ -175,6 +181,11 @@ export function AdminJobCandidates({
                       }`}>
                         {submission.reviewStatus.charAt(0).toUpperCase() + submission.reviewStatus.slice(1)}
                       </span>
+                      {submission.reviewStatus === "rejected" && submission.rejectionReason ? (
+                        <span className="text-xs text-slate-500">
+                          Reason: {submission.rejectionReason}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -184,12 +195,13 @@ export function AdminJobCandidates({
                         title: "Accept application?",
                         message: "The candidate will be marked as accepted for this application.",
                         confirmLabel: "Accept",
+                        loadingLabel: "Accepting...",
                         tone: "neutral",
                         onConfirm: async () => {
                           await updateReviewStatus(submission.id, "accepted");
                         },
                       })}
-                      disabled={submission.reviewStatus === "accepted"}
+                      disabled={submission.reviewStatus === "accepted" || submission.reviewStatus === "rejected"}
                       className="rounded-xl border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Accept
@@ -198,14 +210,16 @@ export function AdminJobCandidates({
                       type="button"
                       onClick={() => setConfirmAction({
                         title: "Reject application?",
-                        message: "The candidate will be marked as rejected for this application.",
-                        confirmLabel: "Reject",
-                        tone: "warning",
-                        onConfirm: async () => {
-                          await updateReviewStatus(submission.id, "rejected");
-                        },
-                      })}
-                      disabled={submission.reviewStatus === "rejected"}
+                          message: "The candidate will be marked as rejected for this application. You can optionally include a reason.",
+                          confirmLabel: "Reject",
+                          loadingLabel: "Rejecting...",
+                          tone: "warning",
+                          requiresReason: true,
+                          onConfirm: async () => {
+                          await updateReviewStatus(submission.id, "rejected", rejectionReasonRef.current);
+                          },
+                        })}
+                      disabled={submission.reviewStatus === "rejected" || submission.reviewStatus === "accepted"}
                       className="rounded-xl border border-amber-300 px-3 py-2 text-sm font-medium text-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Reject
@@ -226,6 +240,7 @@ export function AdminJobCandidates({
                         title: "Delete application?",
                         message: "This permanently removes the application and CV from the candidate record.",
                         confirmLabel: "Delete",
+                        loadingLabel: "Deleting...",
                         tone: "danger",
                         onConfirm: async () => {
                           await deleteApplication(submission.id);
@@ -247,16 +262,53 @@ export function AdminJobCandidates({
         title={confirmAction?.title || ""}
         message={confirmAction?.message || ""}
         confirmLabel={confirmAction?.confirmLabel || "Confirm"}
+        loadingLabel={confirmAction?.loadingLabel}
         tone={confirmAction?.tone}
+        isLoading={isConfirmingAction}
         onConfirm={async () => {
-          if (!confirmAction) {
+          const action = confirmAction;
+          if (!action || isConfirmingAction) {
             return;
           }
-          await confirmAction.onConfirm();
+          setIsConfirmingAction(true);
+          try {
+            await action.onConfirm();
+            setRejectionReason("");
+            rejectionReasonRef.current = "";
+            setConfirmAction(null);
+          } finally {
+            setIsConfirmingAction(false);
+          }
+        }}
+        onCancel={() => {
+          if (isConfirmingAction) {
+            return;
+          }
+          setRejectionReason("");
+          rejectionReasonRef.current = "";
           setConfirmAction(null);
         }}
-        onCancel={() => setConfirmAction(null)}
-      />
+      >
+        {confirmAction?.requiresReason ? (
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-[var(--color-ink)]" htmlFor="reject-reason-job">
+              Rejection reason
+              <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">(Optional)</span>
+            </label>
+            <textarea
+              id="reject-reason-job"
+              value={rejectionReason}
+              onChange={(event) => {
+                setRejectionReason(event.target.value);
+                rejectionReasonRef.current = event.target.value;
+              }}
+              rows={4}
+              placeholder="Provide context for the rejection."
+              className="w-full rounded-2xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand)]"
+            />
+          </div>
+        ) : null}
+      </ConfirmDialog>
       <CandidateCvPreviewModal
         title={activePreview ? [activePreview.firstName, activePreview.lastName].filter(Boolean).join(" ") || activePreview.email : "CV Preview"}
         resumeName={activePreview?.resumeOriginalName || ""}

@@ -5,9 +5,11 @@ type ConfirmDialogProps = {
   title: string;
   message: string;
   confirmLabel?: string;
+  loadingLabel?: string;
   cancelLabel?: string;
   tone?: "danger" | "warning" | "neutral";
   isLoading?: boolean;
+  children?: React.ReactNode;
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;
 };
@@ -17,9 +19,11 @@ export function ConfirmDialog({
   title,
   message,
   confirmLabel = "Confirm",
+  loadingLabel = "Please wait...",
   cancelLabel = "Cancel",
   tone = "danger",
   isLoading = false,
+  children,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -45,21 +49,22 @@ export function ConfirmDialog({
         </p>
         <h3 className="mt-2 text-2xl font-semibold text-[var(--color-ink)]">{title}</h3>
         <p className="mt-3 text-sm leading-6 text-[var(--color-muted)]">{message}</p>
+        {children ? <div className="mt-4">{children}</div> : null}
 
         <div className="mt-6 flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => void onConfirm()}
             disabled={isLoading}
-            className={`rounded-2xl border px-4 py-2 text-sm font-medium disabled:opacity-70 ${confirmClassName}`}
+            className={`theme-action-button rounded-2xl border px-4 py-2 disabled:opacity-70 ${confirmClassName}`}
           >
-            {isLoading ? "Please wait..." : confirmLabel}
+            {isLoading ? loadingLabel : confirmLabel}
           </button>
           <button
             type="button"
             onClick={onCancel}
             disabled={isLoading}
-            className="rounded-2xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-ink)] disabled:opacity-70"
+            className="theme-action-button theme-action-button-secondary rounded-2xl px-4 py-2 disabled:opacity-70"
           >
             {cancelLabel}
           </button>

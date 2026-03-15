@@ -266,7 +266,7 @@ export function PortalShell({
                 {switchHref && switchLabel && (
                   <Link
                     href={switchHref}
-                    className="hidden rounded-2xl border border-[var(--color-border)] bg-white px-4 py-2.5 text-sm font-medium text-[var(--color-ink)] transition hover:border-[var(--color-border-strong)] sm:inline-flex"
+                    className="theme-action-button theme-action-button-secondary hidden rounded-2xl px-4 py-2.5 transition hover:border-[var(--color-border-strong)] sm:inline-flex"
                   >
                     {switchLabel}
                   </Link>
@@ -274,7 +274,7 @@ export function PortalShell({
                 {secondaryActionHref && secondaryActionLabel && (
                   <Link
                     href={secondaryActionHref}
-                    className="hidden rounded-2xl border border-[var(--color-border)] bg-white px-4 py-2.5 text-sm font-medium text-[var(--color-ink)] transition hover:border-[var(--color-border-strong)] sm:inline-flex"
+                    className="theme-action-button theme-action-button-secondary hidden rounded-2xl px-4 py-2.5 transition hover:border-[var(--color-border-strong)] sm:inline-flex"
                   >
                     {secondaryActionLabel}
                   </Link>
@@ -282,7 +282,7 @@ export function PortalShell({
                 {primaryActionHref && primaryActionLabel && (
                   <Link
                     href={primaryActionHref}
-                    className="theme-btn-primary rounded-2xl px-4 py-2.5 text-sm font-medium"
+                    className="theme-btn-primary theme-action-button rounded-2xl px-4 py-2.5"
                   >
                     {primaryActionLabel}
                   </Link>
@@ -300,7 +300,7 @@ export function PortalShell({
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-medium whitespace-nowrap transition ${
+                    className={`theme-action-button inline-flex items-center gap-2 rounded-2xl border px-4 py-2 whitespace-nowrap transition ${
                       active
                         ? "theme-surface-active"
                         : "border-[var(--color-border)] bg-white text-[var(--color-muted)]"

@@ -31,7 +31,11 @@ export function CandidateApplyWorkspace({
   submissions,
 }: CandidateApplyWorkspaceProps) {
   const profileReady = isProfileReady(profile);
-  const appliedJobIds = new Set(submissions.map((submission) => submission.jobId));
+  const appliedJobIds = new Set(
+    submissions
+      .filter((submission) => submission.reviewStatus !== "rejected")
+      .map((submission) => submission.jobId),
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [workplaceFilter, setWorkplaceFilter] = useState("all");
   const filteredJobs = useMemo(() => {

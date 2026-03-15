@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { MoreHorizontal } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -123,7 +122,7 @@ export function AdminRowActionMenu({ items }: AdminRowActionMenuProps) {
           event.stopPropagation();
         }}
         onClick={() => setIsOpen((current) => !current)}
-        className="inline-flex items-center rounded-xl border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-[var(--color-ink)]"
+        className="inline-flex items-center rounded-xl border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-[var(--color-ink)] [font-family:inherit]"
         aria-haspopup="menu"
         aria-expanded={isOpen}
       >
@@ -137,7 +136,7 @@ export function AdminRowActionMenu({ items }: AdminRowActionMenuProps) {
               onMouseDown={(event) => {
                 event.stopPropagation();
               }}
-              className="fixed z-[80] min-w-56 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white p-1.5 shadow-[0_24px_64px_rgba(5,39,15,0.18)]"
+              className="fixed z-[80] min-w-56 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white p-1.5 shadow-[0_24px_64px_rgba(5,39,15,0.18)] [font-family:inherit]"
               style={menuStyle}
             >
               {items.map((item) => {
@@ -147,24 +146,9 @@ export function AdminRowActionMenu({ items }: AdminRowActionMenuProps) {
                     <span>{item.label}</span>
                   </>
                 );
-                const className = `flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-medium ${
+                const className = `flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-medium [font-family:inherit] ${
                   item.tone === "danger" ? "text-rose-700 hover:bg-rose-50" : "text-[var(--color-ink)] hover:bg-[var(--color-panel)]"
                 }${item.disabled ? " cursor-not-allowed opacity-50" : ""}`;
-
-                if (item.href) {
-                  return (
-                    <Link
-                      key={item.label}
-                      href={item.disabled ? "#" : item.href}
-                      target={item.target}
-                      rel={item.rel}
-                      onClick={() => setIsOpen(false)}
-                      className={className}
-                    >
-                      {content}
-                    </Link>
-                  );
-                }
 
                 return (
                   <button
@@ -175,7 +159,15 @@ export function AdminRowActionMenu({ items }: AdminRowActionMenuProps) {
                       if (item.disabled) {
                         return;
                       }
-                      void item.onSelect?.();
+                      if (item.href) {
+                        if (item.target === "_blank") {
+                          window.open(item.href, "_blank", "noopener,noreferrer");
+                        } else {
+                          window.location.assign(item.href);
+                        }
+                      } else {
+                        void item.onSelect?.();
+                      }
                       setIsOpen(false);
                     }}
                     className={className}

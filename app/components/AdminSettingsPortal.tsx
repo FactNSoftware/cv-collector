@@ -54,6 +54,7 @@ export function AdminSettingsPortal({
 }: AdminSettingsPortalProps) {
   const [adminEmail, setAdminEmail] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [tablePageSize, setTablePageSize] = useState(initialPageInfo.limit);
   const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
   const [editingEmail, setEditingEmail] = useState<string | null>(null);
   const [editedEmail, setEditedEmail] = useState("");
@@ -61,17 +62,17 @@ export function AdminSettingsPortal({
   const [pendingDeleteAdminEmail, setPendingDeleteAdminEmail] = useState<string | null>(null);
   const { viewMode, setViewMode } = usePersistedViewMode("admin-settings-view-mode", "table");
   const { showToast } = useToast();
-  const resetKey = searchQuery;
+  const resetKey = `${searchQuery}|${tablePageSize}`;
 
   const fetchPage = useCallback(async (cursor?: string) => {
     const response = await fetch(`/api/admin/admins?${createQueryString({
-      limit: initialPageInfo.limit,
+      limit: tablePageSize,
       cursor,
       searchQuery,
     })}`);
     const payload = await response.json().catch(() => ({
       items: [],
-      pageInfo: { limit: initialPageInfo.limit, nextCursor: null, hasMore: false },
+      pageInfo: { limit: tablePageSize, nextCursor: null, hasMore: false },
     }));
 
     if (!response.ok) {
@@ -79,7 +80,7 @@ export function AdminSettingsPortal({
     }
 
     return payload;
-  }, [initialPageInfo.limit, searchQuery]);
+  }, [searchQuery, tablePageSize]);
 
   const {
     items,
@@ -350,10 +351,12 @@ export function AdminSettingsPortal({
               isLoading={isLoading}
               emptyMessage="No admins match the current search."
               pageIndex={pageIndex}
+              pageSize={tablePageSize}
               canPreviousPage={canPreviousPage}
               canNextPage={canNextPage}
               onPreviousPage={goToPreviousPage}
               onNextPage={goToNextPage}
+              onPageSizeChange={setTablePageSize}
             />
           ) : (
             <>

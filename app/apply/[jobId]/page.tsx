@@ -41,7 +41,12 @@ export default async function ApplyJobPage({ params }: ApplyJobPageProps) {
     listCvSubmissionsByEmail(session.email),
   ]);
 
-  const existingSubmission = submissions.find((submission) => submission.jobId === job.id) ?? null;
+  const existingSubmission = submissions.find(
+    (submission) => submission.jobId === job.id && submission.reviewStatus !== "rejected",
+  ) ?? null;
+  const rejectedAttempts = submissions
+    .filter((submission) => submission.jobId === job.id && submission.reviewStatus === "rejected")
+    .sort((left, right) => new Date(right.submittedAt).getTime() - new Date(left.submittedAt).getTime());
 
   return (
     <PortalShell
@@ -56,6 +61,7 @@ export default async function ApplyJobPage({ params }: ApplyJobPageProps) {
         initialProfile={profile}
         job={job}
         existingSubmission={existingSubmission}
+        rejectedAttempts={rejectedAttempts}
       />
     </PortalShell>
   );

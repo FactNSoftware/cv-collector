@@ -23,10 +23,13 @@ type AdminDataTableProps<TData> = {
   isLoading?: boolean;
   emptyMessage: string;
   pageIndex: number;
+  pageSize: number;
+  pageSizeOptions?: number[];
   canPreviousPage: boolean;
   canNextPage: boolean;
   onPreviousPage: () => void | Promise<void>;
   onNextPage: () => void | Promise<void>;
+  onPageSizeChange?: (pageSize: number) => void;
   onRowClick?: (row: TData) => void;
 };
 
@@ -36,10 +39,13 @@ export function AdminDataTable<TData>({
   isLoading = false,
   emptyMessage,
   pageIndex,
+  pageSize,
+  pageSizeOptions = [10, 25, 50, 100],
   canPreviousPage,
   canNextPage,
   onPreviousPage,
   onNextPage,
+  onPageSizeChange,
   onRowClick,
 }: AdminDataTableProps<TData>) {
   const table = useReactTable({
@@ -107,15 +113,31 @@ export function AdminDataTable<TData>({
       </div>
 
       <div className="flex items-center justify-between gap-3 border-t border-[var(--color-border)] px-4 py-3">
-        <div className="text-sm text-[var(--color-muted)]">
-          Page {pageIndex + 1}
+        <div className="flex items-center gap-3">
+          <div className="text-sm text-[var(--color-muted)]">
+            Page {pageIndex + 1}
+          </div>
+          {onPageSizeChange ? (
+            <label className="flex items-center gap-2 text-sm text-[var(--color-muted)]">
+              <span>Rows</span>
+              <select
+                value={pageSize}
+                onChange={(event) => onPageSizeChange(Number(event.target.value))}
+                className="h-9 rounded-xl border border-[var(--color-border)] bg-white px-3 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand)]"
+              >
+                {pageSizeOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => void onPreviousPage()}
             disabled={!canPreviousPage || isLoading}
-            className="inline-flex items-center rounded-xl border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-[var(--color-ink)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="theme-action-button theme-action-button-secondary inline-flex items-center rounded-xl px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ChevronLeft className="mr-1 h-4 w-4" />
             Previous
@@ -124,7 +146,7 @@ export function AdminDataTable<TData>({
             type="button"
             onClick={() => void onNextPage()}
             disabled={!canNextPage || isLoading}
-            className="inline-flex items-center rounded-xl border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-[var(--color-ink)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="theme-action-button theme-action-button-secondary inline-flex items-center rounded-xl px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Next
             <ChevronRight className="ml-1 h-4 w-4" />

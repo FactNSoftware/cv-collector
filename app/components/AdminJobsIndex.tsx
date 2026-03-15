@@ -67,23 +67,24 @@ export function AdminJobsIndex({
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [tablePageSize, setTablePageSize] = useState(initialPageInfo.limit);
   const [pendingDeleteJobId, setPendingDeleteJobId] = useState<string | null>(null);
   const [pendingPublishJob, setPendingPublishJob] = useState<AdminJobListItem | null>(null);
   const [downloadingJobId, setDownloadingJobId] = useState<string | null>(null);
   const { viewMode, setViewMode } = usePersistedViewMode("admin-jobs-view-mode", "card");
   const { showToast } = useToast();
-  const resetKey = `${searchQuery}|${statusFilter}`;
+  const resetKey = `${searchQuery}|${statusFilter}|${tablePageSize}`;
 
   const fetchPage = useCallback(async (cursor?: string) => {
     const response = await fetch(`/api/admin/jobs?${createQueryString({
-      limit: initialPageInfo.limit,
+      limit: tablePageSize,
       cursor,
       searchQuery,
       statusFilter,
     })}`);
     const payload = await response.json().catch(() => ({
       items: [],
-      pageInfo: { limit: initialPageInfo.limit, nextCursor: null, hasMore: false },
+      pageInfo: { limit: tablePageSize, nextCursor: null, hasMore: false },
     }));
 
     if (!response.ok) {
@@ -91,7 +92,7 @@ export function AdminJobsIndex({
     }
 
     return payload;
-  }, [initialPageInfo.limit, searchQuery, statusFilter]);
+  }, [searchQuery, statusFilter, tablePageSize]);
 
   const {
     items,
@@ -353,10 +354,12 @@ export function AdminJobsIndex({
             isLoading={isLoading}
             emptyMessage="No jobs match the current filters."
             pageIndex={pageIndex}
+            pageSize={tablePageSize}
             canPreviousPage={canPreviousPage}
             canNextPage={canNextPage}
             onPreviousPage={goToPreviousPage}
             onNextPage={goToNextPage}
+            onPageSizeChange={setTablePageSize}
             onRowClick={(job) => router.push(`/admin/jobs/${job.id}/edit`)}
           />
         ) : (

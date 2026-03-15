@@ -6,12 +6,14 @@ import {
   deleteCvSubmission,
   updateCvSubmissionReview,
   type CvReviewStatus,
+  InvalidApplicationReviewTransitionError,
 } from "../../../../../lib/cv-storage";
 
 export const runtime = "nodejs";
 
 type ApplicationPayload = {
   reviewStatus?: CvReviewStatus;
+  rejectionReason?: string;
 };
 
 export async function PATCH(
@@ -39,6 +41,7 @@ export async function PATCH(
       id,
       reviewStatus: body.reviewStatus,
       reviewedBy: auth.session.email,
+      rejectionReason: body.rejectionReason,
     });
 
     if (!updated) {
@@ -58,6 +61,7 @@ export async function PATCH(
         candidateEmail: updated.email,
         jobCode: updated.jobCode,
         reviewStatus: body.reviewStatus,
+        rejectionReason: updated.rejectionReason || undefined,
       },
     });
 
@@ -66,6 +70,13 @@ export async function PATCH(
       item: updated,
     });
   } catch (error) {
+    if (error instanceof InvalidApplicationReviewTransitionError) {
+      return NextResponse.json(
+        { message: error.message },
+        { status: 409 },
+      );
+    }
+
     console.error("Failed to update application", error);
     return NextResponse.json(
       { message: "Failed to update application." },

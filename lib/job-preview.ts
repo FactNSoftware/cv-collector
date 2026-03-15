@@ -17,6 +17,7 @@ export type JobPreviewDraft = {
   salaryCurrency: string;
   salaryRange: string;
   vacancies: string;
+  maxRetryAttempts: string;
   closingDate: string;
   requirements: string;
   benefits: string;
@@ -50,6 +51,7 @@ export const mergeJobPreviewDraft = (
     salaryCurrency: draft.salaryCurrency === "USD" ? "USD" : "LKR",
     salaryRange: draft.salaryRange,
     vacancies: Number.isFinite(vacancies) && vacancies > 0 ? vacancies : null,
+    maxRetryAttempts: Math.max(0, Number.parseInt(draft.maxRetryAttempts, 10) || 0),
     closingDate: draft.closingDate,
     requirements: draft.requirements,
     benefits: draft.benefits,

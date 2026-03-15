@@ -1,14 +1,12 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { Eye } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { AdminAccount } from "../../lib/admin-access";
 import type { AdminAuditLogRecord } from "../../lib/audit-log";
 import type { PageInfo } from "../../lib/pagination";
 import { AdminAuditCardView } from "./AdminAuditCardView";
 import { AdminDataTable } from "./AdminDataTable";
-import { AdminRowActionMenu } from "./AdminRowActionMenu";
 import { AdminViewModeToggle } from "./AdminViewModeToggle";
 import { PortalShell } from "./PortalShell";
 import { usePersistedViewMode } from "./usePersistedViewMode";
@@ -72,20 +70,21 @@ export function AdminAuditPortal({
 }: AdminAuditPortalProps) {
   const [actorFilter, setActorFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [tablePageSize, setTablePageSize] = useState(initialPageInfo.limit);
   const [selectedRecord, setSelectedRecord] = useState<AdminAuditLogRecord | null>(null);
   const { viewMode, setViewMode } = usePersistedViewMode("admin-audit-view-mode", "table");
-  const resetKey = `${actorFilter}|${searchQuery}`;
+  const resetKey = `${actorFilter}|${searchQuery}|${tablePageSize}`;
 
   const fetchPage = async (cursor?: string) => {
     const response = await fetch(`/api/admin/audit?${createQueryString({
-      limit: initialPageInfo.limit,
+      limit: tablePageSize,
       cursor,
       actorFilter,
       searchQuery,
     })}`);
     const payload = await response.json().catch(() => ({
       items: [],
-      pageInfo: { limit: initialPageInfo.limit, nextCursor: null, hasMore: false },
+      pageInfo: { limit: tablePageSize, nextCursor: null, hasMore: false },
     }));
 
     if (!response.ok) {
@@ -166,23 +165,6 @@ export function AdminAuditPortal({
         </div>
       ),
     },
-    {
-      id: "details",
-      header: "Details",
-      cell: ({ row }) => (
-        <div className="flex justify-end">
-          <AdminRowActionMenu
-            items={[
-              {
-                label: "View details",
-                icon: <Eye className="h-4 w-4" />,
-                onSelect: () => setSelectedRecord(row.original),
-              },
-            ]}
-          />
-        </div>
-      ),
-    },
   ], []);
 
   return (
@@ -226,10 +208,13 @@ export function AdminAuditPortal({
             isLoading={isLoading}
             emptyMessage="No audit events found for the selected filter."
             pageIndex={pageIndex}
+            pageSize={tablePageSize}
             canPreviousPage={canPreviousPage}
             canNextPage={canNextPage}
             onPreviousPage={goToPreviousPage}
             onNextPage={goToNextPage}
+            onPageSizeChange={setTablePageSize}
+            onRowClick={setSelectedRecord}
           />
         ) : (
           <>

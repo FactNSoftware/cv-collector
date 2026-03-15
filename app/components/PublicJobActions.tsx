@@ -32,7 +32,7 @@ export function PublicJobActions({
         href={publicPath}
         target="_blank"
         rel="noreferrer"
-        className="inline-flex items-center rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+        className="theme-action-button theme-action-button-secondary inline-flex items-center rounded-xl px-4 py-2"
       >
         <ExternalLink className="mr-2 h-4 w-4" />
         Public View
@@ -40,7 +40,7 @@ export function PublicJobActions({
       <button
         type="button"
         onClick={handleCopyLink}
-        className="inline-flex items-center rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+        className="theme-action-button theme-action-button-secondary inline-flex items-center rounded-xl px-4 py-2"
       >
         <Link2 className="mr-2 h-4 w-4" />
         Copy Public Link

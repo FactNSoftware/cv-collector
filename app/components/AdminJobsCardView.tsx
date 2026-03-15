@@ -57,38 +57,38 @@ export function AdminJobsCardView({
             </div>
             <div className="flex flex-wrap gap-2">
               {job.isPublished && <PublicJobActions jobId={job.id} />}
-              <Link href={`/admin/jobs/${job.id}/edit`} className="inline-flex items-center rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-ink)]">
+              <Link href={`/admin/jobs/${job.id}/edit`} className="theme-action-button theme-action-button-secondary inline-flex items-center rounded-xl px-4 py-2">
                 <Pencil className="mr-2 h-4 w-4" />
                 Edit Job
               </Link>
-              <Link href={`/admin/jobs/${job.id}/candidates`} className="inline-flex items-center rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-ink)]">
+              <Link href={`/admin/jobs/${job.id}/candidates`} className="theme-action-button theme-action-button-secondary inline-flex items-center rounded-xl px-4 py-2">
                 <Users className="mr-2 h-4 w-4" />
-                View Candidates
+                View Applicants
               </Link>
               <button
                 type="button"
                 onClick={() => onDownloadZip(job)}
                 disabled={job.applicantCount === 0 || downloadingJobId === job.id}
-                className="inline-flex items-center rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-ink)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="theme-action-button theme-action-button-secondary inline-flex items-center rounded-xl px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FileArchive className="mr-2 h-4 w-4" />
-                {downloadingJobId === job.id ? "Preparing ZIP..." : "Download CV ZIP"}
+                {downloadingJobId === job.id ? "Preparing ZIP..." : "Download Applicant CVs"}
               </button>
               <button
                 type="button"
                 onClick={() => onTogglePublish(job)}
                 className={job.isPublished
-                  ? "inline-flex items-center rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-panel-strong)] px-4 py-2 text-sm font-medium text-[var(--color-brand-strong)]"
-                  : "theme-btn-primary inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium"}
+                  ? "theme-action-button theme-action-button-soft inline-flex items-center rounded-xl px-4 py-2"
+                  : "theme-btn-primary theme-action-button inline-flex items-center rounded-xl px-4 py-2"}
               >
-                {job.isPublished ? "Unpublish" : "Publish"}
+                {job.isPublished ? "Unpublish Job" : "Publish Job"}
               </button>
               <button
                 type="button"
                 onClick={() => onDelete(job.id)}
-                className="inline-flex items-center rounded-xl border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700"
+                className="theme-action-button theme-action-button-danger inline-flex items-center rounded-xl px-4 py-2"
               >
-                Delete
+                Delete Job
               </button>
             </div>
           </div>

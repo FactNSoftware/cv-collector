@@ -17,6 +17,12 @@
 
 * {
   box-sizing: border-box;
+  font-family: inherit;
+}
+
+*::before,
+*::after {
+  font-family: inherit;
 }
 
 html {
@@ -24,6 +30,7 @@ html {
     radial-gradient(circle at top left, rgba(165, 235, 46, 0.16), transparent 28%),
     radial-gradient(circle at bottom right, rgba(0, 61, 24, 0.08), transparent 32%),
     linear-gradient(180deg, #f8fbf6 0%, #edf4ee 100%);
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
 }
 
 body {
@@ -31,7 +38,10 @@ body {
   min-height: 100vh;
   background: transparent;
   color: var(--color-ink);
-  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  font-family: inherit;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -63,6 +73,11 @@ a {
 }
 
 .theme-btn-primary {
+  font-family: inherit !important;
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
   background: var(--color-sidebar-accent);
   color: var(--color-sidebar-accent-ink) !important;
   border: 1px solid var(--color-sidebar-accent);
@@ -87,4 +102,32 @@ a {
   background: var(--color-sidebar-accent);
   color: var(--color-sidebar-accent-ink) !important;
   border-color: var(--color-sidebar-accent);
+}
+
+.theme-action-button {
+  font-family: inherit !important;
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.theme-action-button-secondary {
+  border: 1px solid var(--color-border);
+  background: #fff;
+  color: var(--color-ink);
+}
+
+.theme-action-button-soft {
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-panel-strong);
+  color: var(--color-brand-strong);
+}
+
+.theme-action-button-danger {
+  border: 1px solid #fda4af;
+  background: #fff;
+  color: #be123c;
 }
