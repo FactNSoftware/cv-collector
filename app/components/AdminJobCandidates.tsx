@@ -13,7 +13,8 @@ import {
   Users,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { canSubmissionAtsBeRecalculated, type CvSubmissionRecord } from "../../lib/cv-storage";
+import { canSubmissionAtsBeRecalculated } from "../../lib/ats-recalculation";
+import type { CvSubmissionRecord } from "../../lib/cv-storage";
 import type { JobRecord } from "../../lib/jobs";
 import { AdminDataTable } from "./AdminDataTable";
 import { AdminRowActionMenu } from "./AdminRowActionMenu";

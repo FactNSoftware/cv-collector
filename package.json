@@ -12,6 +12,7 @@
     "@azure/communication-email": "^1.0.0",
     "@azure/data-tables": "^13.3.1",
     "@azure/storage-blob": "^12.29.1",
+    "@napi-rs/canvas": "^0.1.80",
     "@tanstack/react-table": "^8.21.3",
     "jszip": "^3.10.1",
     "lucide-react": "^0.577.0",

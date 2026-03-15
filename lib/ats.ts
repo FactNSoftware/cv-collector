@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
+import fs from "fs";
 import path from "path";
 import { pathToFileURL } from "url";
 import { z } from "zod";
@@ -9,10 +10,23 @@ const DEFAULT_ATS_MODEL = "gpt-4o-mini";
 const MAX_RESUME_TEXT_CHARS = 20_000;
 
 let openAiClient: OpenAI | null | undefined;
-const pdfParseWorkerPath = path.resolve(
-  process.cwd(),
-  "node_modules/pdf-parse/dist/worker/pdf.worker.mjs",
-);
+const getPdfParseWorkerPath = () => {
+  const candidates = [
+    path.resolve(process.cwd(), "node_modules/pdf-parse/dist/pdf-parse/esm/pdf.worker.mjs"),
+    path.resolve(process.cwd(), "node_modules/pdf-parse/dist/pdf-parse/cjs/pdf.worker.mjs"),
+    path.resolve(process.cwd(), "node_modules/pdf-parse/dist/pdf-parse/web/pdf.worker.mjs"),
+    path.resolve(process.cwd(), "node_modules/pdf-parse/dist/node/esm/pdf.worker.mjs"),
+    path.resolve(process.cwd(), "node_modules/pdf-parse/dist/node/cjs/pdf.worker.mjs"),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error("Unable to locate pdf-parse worker file in runtime bundle.");
+};
 
 const atsAnalysisSchema = z.object({
   candidateSummary: z.string().default(""),
@@ -248,7 +262,7 @@ const buildRulesEvaluation = ({
 
 const extractResumeText = async (resumeBuffer: Buffer) => {
   const { PDFParse } = await import("pdf-parse");
-  PDFParse.setWorker(pathToFileURL(pdfParseWorkerPath).toString());
+  PDFParse.setWorker(pathToFileURL(getPdfParseWorkerPath()).toString());
   const parser = new PDFParse({ data: resumeBuffer });
 
   try {
