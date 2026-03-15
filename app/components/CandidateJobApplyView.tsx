@@ -292,10 +292,15 @@ export function CandidateJobApplyView({
 
         {submission && (
           <div className="mt-5 rounded-[24px] border border-emerald-200 bg-emerald-50 p-5">
-            <p className="text-sm font-semibold text-emerald-900">Application already submitted</p>
+            <p className="text-sm font-semibold text-emerald-900">
+              {submission.reviewStatus === "accepted"
+                ? "Congratulations, your application has been accepted"
+                : "Application already submitted"}
+            </p>
             <p className="mt-2 text-sm leading-6 text-emerald-800">
-              You already applied for this job on {new Date(submission.submittedAt).toLocaleString()}.
-              Withdraw this application if you want to apply again with an updated CV.
+              {submission.reviewStatus === "accepted"
+                ? "Your application has been accepted. We will inform you soon with the next steps."
+                : `You already applied for this job on ${new Date(submission.submittedAt).toLocaleString()}. Withdraw this application if you want to apply again with an updated CV.`}
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <a
@@ -308,14 +313,15 @@ export function CandidateJobApplyView({
               >
                 View CV
               </a>
-              <button
-                type="button"
-                onClick={() => setIsWithdrawConfirmOpen(true)}
-                disabled={isWithdrawing}
-                className="rounded-2xl border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700 disabled:opacity-70"
-              >
-                {isWithdrawing ? "Withdrawing..." : "Withdraw Application"}
-              </button>
+              {submission.reviewStatus === "pending" && !isWithdrawing ? (
+                <button
+                  type="button"
+                  onClick={() => setIsWithdrawConfirmOpen(true)}
+                  className="rounded-2xl border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700"
+                >
+                  Withdraw Application
+                </button>
+              ) : null}
             </div>
           </div>
         )}
@@ -356,6 +362,15 @@ export function CandidateJobApplyView({
           </div>
         )}
 
+        {!submission && hasReachedRejectedAttemptLimit ? (
+          <div className="mt-5 rounded-[24px] border border-rose-200 bg-rose-50 p-5">
+            <p className="text-sm font-semibold text-rose-900">No more attempts available</p>
+            <p className="mt-2 text-sm leading-6 text-rose-800">
+              {attemptLimitMessage} You cannot submit another application for {job.code}.
+            </p>
+          </div>
+        ) : null}
+
         <div className="mt-6 rounded-[24px] border border-[var(--color-border)] bg-white p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -376,67 +391,65 @@ export function CandidateJobApplyView({
           </div>
         </div>
 
-        <div className="mt-5 rounded-[24px] border border-[var(--color-border)] bg-white p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-[var(--color-ink)]">
-                Resume / CV <span className="text-rose-600">*</span>
-              </p>
-              <p className="mt-1 text-sm text-[var(--color-muted)]">
-                Upload your latest resume as a PDF. This step is required.
-              </p>
+        {!submission && !hasReachedRejectedAttemptLimit ? (
+          <div className="mt-5 rounded-[24px] border border-[var(--color-border)] bg-white p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-[var(--color-ink)]">
+                  Resume / CV <span className="text-rose-600">*</span>
+                </p>
+                <p className="mt-1 text-sm text-[var(--color-muted)]">
+                  Upload your latest resume as a PDF. This step is required.
+                </p>
+              </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setIsDragging(false);
+                updateResume(event.dataTransfer.files?.[0] ?? null);
+              }}
+              className={`mt-4 flex min-h-56 w-full flex-col items-center justify-center rounded-[24px] border border-dashed px-6 text-center transition ${
+                isDragging
+                  ? "border-[var(--color-brand)] bg-[rgba(165,235,46,0.08)]"
+                  : "border-[var(--color-border)] bg-[var(--color-panel)]"
+              }`}
+            >
+              <FileUp className="mb-4 h-10 w-10 text-[var(--color-sidebar-accent)]" strokeWidth={2} />
+              <p className="text-base font-medium text-[var(--color-ink)]">
+                {resume ? resume.name : "Click or drag your CV here"}
+              </p>
+              <p className="mt-2 text-sm text-[var(--color-muted)]">
+                PDF only. This field is required before submission.
+              </p>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              onChange={handleFileSelection}
+              className="sr-only"
+            />
           </div>
+        ) : null}
 
+        {!submission && !hasReachedRejectedAttemptLimit ? (
           <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={(event) => {
-              event.preventDefault();
-              setIsDragging(false);
-              updateResume(event.dataTransfer.files?.[0] ?? null);
-            }}
-            className={`mt-4 flex min-h-56 w-full flex-col items-center justify-center rounded-[24px] border border-dashed px-6 text-center transition ${
-              isDragging
-                ? "border-[var(--color-brand)] bg-[rgba(165,235,46,0.08)]"
-                : "border-[var(--color-border)] bg-[var(--color-panel)]"
-            }`}
+            type="submit"
+            disabled={isSubmitting || !resume}
+            className="theme-btn-primary mt-5 flex h-12 w-full items-center justify-center rounded-2xl text-sm font-medium disabled:opacity-70"
           >
-            <FileUp className="mb-4 h-10 w-10 text-[var(--color-sidebar-accent)]" strokeWidth={2} />
-            <p className="text-base font-medium text-[var(--color-ink)]">
-              {resume ? resume.name : "Click or drag your CV here"}
-            </p>
-            <p className="mt-2 text-sm text-[var(--color-muted)]">
-              PDF only. This field is required before submission.
-            </p>
+            {isSubmitting ? "Submitting..." : `Apply for ${job.code}`}
           </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,application/pdf"
-            onChange={handleFileSelection}
-            className="sr-only"
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={isSubmitting || Boolean(submission) || !resume || hasReachedRejectedAttemptLimit}
-          className="theme-btn-primary mt-5 flex h-12 w-full items-center justify-center rounded-2xl text-sm font-medium disabled:opacity-70"
-        >
-          {submission
-            ? "Already Applied"
-            : hasReachedRejectedAttemptLimit
-              ? "Reapply Not Available"
-              : isSubmitting
-                ? "Submitting..."
-                : `Apply for ${job.code}`}
-        </button>
+        ) : null}
 
         <p className="mt-4 text-xs leading-5 text-[var(--color-muted)]">
           By submitting, you agree to receive hiring updates related to this application.

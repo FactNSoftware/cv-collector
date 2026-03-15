@@ -189,41 +189,43 @@ export function AdminJobCandidates({
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setConfirmAction({
-                        title: "Accept application?",
-                        message: "The candidate will be marked as accepted for this application.",
-                        confirmLabel: "Accept",
-                        loadingLabel: "Accepting...",
-                        tone: "neutral",
-                        onConfirm: async () => {
-                          await updateReviewStatus(submission.id, "accepted");
-                        },
-                      })}
-                      disabled={submission.reviewStatus === "accepted" || submission.reviewStatus === "rejected"}
-                      className="rounded-xl border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Accept
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmAction({
-                        title: "Reject application?",
-                          message: "The candidate will be marked as rejected for this application. You can optionally include a reason.",
-                          confirmLabel: "Reject",
-                          loadingLabel: "Rejecting...",
-                          tone: "warning",
-                          requiresReason: true,
-                          onConfirm: async () => {
-                          await updateReviewStatus(submission.id, "rejected", rejectionReasonRef.current);
-                          },
-                        })}
-                      disabled={submission.reviewStatus === "rejected" || submission.reviewStatus === "accepted"}
-                      className="rounded-xl border border-amber-300 px-3 py-2 text-sm font-medium text-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Reject
-                    </button>
+                    {submission.reviewStatus === "pending" ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmAction({
+                            title: "Accept application?",
+                            message: "The candidate will be marked as accepted for this application.",
+                            confirmLabel: "Accept",
+                            loadingLabel: "Accepting...",
+                            tone: "neutral",
+                            onConfirm: async () => {
+                              await updateReviewStatus(submission.id, "accepted");
+                            },
+                          })}
+                          className="rounded-xl border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-700"
+                        >
+                          Accept
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmAction({
+                            title: "Reject application?",
+                              message: "The candidate will be marked as rejected for this application. You can optionally include a reason.",
+                              confirmLabel: "Reject",
+                              loadingLabel: "Rejecting...",
+                              tone: "warning",
+                              requiresReason: true,
+                              onConfirm: async () => {
+                              await updateReviewStatus(submission.id, "rejected", rejectionReasonRef.current);
+                              },
+                            })}
+                          className="rounded-xl border border-amber-300 px-3 py-2 text-sm font-medium text-amber-700"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    ) : null}
                     <Link href={`/admin/candidates/${encodeURIComponent(submission.email)}`} className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700">
                       View Candidate
                     </Link>
