@@ -9,6 +9,7 @@ This is a full-stack Next.js app for OTP-protected CV submission and review.
 - [Contributing Guide](/Users/factnsoftware/Documents/cv-collector/CONTRIBUTING.md)
 - [Code of Conduct](/Users/factnsoftware/Documents/cv-collector/CODE_OF_CONDUCT.md)
 - [Changelog](/Users/factnsoftware/Documents/cv-collector/CHANGELOG.md)
+- [Documentation Hub](/Users/factnsoftware/Documents/cv-collector/docs/index.md)
 - [Chat Integration Design](/Users/factnsoftware/Documents/cv-collector/docs/chat-integration.md)
 
 ## Ownership
