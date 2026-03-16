@@ -72,6 +72,9 @@ type JobEntity = {
   isPublished: boolean;
   createdAt: number;
   updatedAt: number;
+  isDeleted?: boolean;
+  deletedAt?: number;
+  deletedBy?: string;
 };
 
 export type JobRecord = {
@@ -99,6 +102,9 @@ export type JobRecord = {
   requirements: string;
   benefits: string;
   isPublished: boolean;
+  isDeleted: boolean;
+  deletedAt: string | null;
+  deletedBy: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -278,6 +284,9 @@ const toJobRecord = (entity: JobEntity): JobRecord => {
     requirements: normalizeText(entity.requirements),
     benefits: normalizeText(entity.benefits),
     isPublished: Boolean(entity.isPublished),
+    isDeleted: Boolean(entity.isDeleted),
+    deletedAt: entity.deletedAt ? new Date(entity.deletedAt).toISOString() : null,
+    deletedBy: normalizeText(entity.deletedBy),
     createdAt: new Date(entity.createdAt).toISOString(),
     updatedAt: new Date(entity.updatedAt).toISOString(),
   };
@@ -334,6 +343,28 @@ export const getJobAtsConfigSignature = (
   return payload;
 };
 
+export const hasEffectiveAtsCriteria = (
+  job: Pick<
+    JobRecord,
+    | "atsEnabled"
+    | "atsRequiredKeywords"
+    | "atsPreferredKeywords"
+    | "atsMinimumYearsExperience"
+    | "atsRequiredEducation"
+    | "atsRequiredCertifications"
+  >,
+) => {
+  if (!job.atsEnabled) {
+    return false;
+  }
+
+  return job.atsRequiredKeywords.length > 0
+    || job.atsPreferredKeywords.length > 0
+    || (typeof job.atsMinimumYearsExperience === "number" && job.atsMinimumYearsExperience > 0)
+    || job.atsRequiredEducation.length > 0
+    || job.atsRequiredCertifications.length > 0;
+};
+
 export const listJobs = async (): Promise<JobRecord[]> => {
   const tableClient = await getAppTableClient();
   const entities = tableClient.listEntities<JobEntity>({
@@ -345,7 +376,11 @@ export const listJobs = async (): Promise<JobRecord[]> => {
   const items: JobRecord[] = [];
 
   for await (const entity of entities) {
-    items.push(toJobRecord(entity));
+    const record = toJobRecord(entity);
+
+    if (!record.isDeleted) {
+      items.push(record);
+    }
   }
 
   return items.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
@@ -375,6 +410,7 @@ export const listJobsPage = async (
   for await (const page of pages) {
     const items = [...page]
       .map((entity) => toJobRecord(entity))
+      .filter((entity) => !entity.isDeleted)
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 
     return {
@@ -389,7 +425,7 @@ export const listJobsPage = async (
   };
 };
 
-export const getJobById = async (id: string): Promise<JobRecord | null> => {
+export const getJobById = async (id: string, options?: { includeDeleted?: boolean }): Promise<JobRecord | null> => {
   if (!id) {
     return null;
   }
@@ -398,7 +434,12 @@ export const getJobById = async (id: string): Promise<JobRecord | null> => {
 
   try {
     const entity = await tableClient.getEntity<JobEntity>(JOB_SCOPE, toRowKey(id));
-    return entity.type === JOB_TYPE ? toJobRecord(entity) : null;
+    if (entity.type !== JOB_TYPE) {
+      return null;
+    }
+
+    const record = toJobRecord(entity);
+    return record.isDeleted && !options?.includeDeleted ? null : record;
   } catch (error) {
     if (isTableNotFoundError(error)) {
       return null;
@@ -409,7 +450,18 @@ export const getJobById = async (id: string): Promise<JobRecord | null> => {
 };
 
 const getNextJobCode = async () => {
-  const jobs = await listJobs();
+  const tableClient = await getAppTableClient();
+  const entities = tableClient.listEntities<JobEntity>({
+    queryOptions: {
+      filter: `PartitionKey eq '${JOB_SCOPE}' and type eq '${JOB_TYPE}'`,
+    },
+  });
+  const jobs: JobRecord[] = [];
+
+  for await (const entity of entities) {
+    jobs.push(toJobRecord(entity));
+  }
+
   const highestSequence = jobs.reduce((max, job) => {
     return Math.max(max, getCodeSequence(job.code));
   }, 0);
@@ -455,6 +507,9 @@ export const upsertJob = async (input: UpsertJobInput): Promise<JobRecord> => {
     requirements: normalizeText(input.requirements),
     benefits: normalizeText(input.benefits),
     isPublished: input.isPublished,
+    isDeleted: false,
+    deletedAt: 0,
+    deletedBy: "",
     createdAt: existing ? Date.parse(existing.createdAt) : now,
     updatedAt: now,
   };
@@ -463,7 +518,68 @@ export const upsertJob = async (input: UpsertJobInput): Promise<JobRecord> => {
   return toJobRecord(entity);
 };
 
-export const deleteJob = async (id: string) => {
+export const deleteJob = async (id: string, deletedBy: string) => {
+  const existing = await getJobById(id, { includeDeleted: true });
+
+  if (!existing) {
+    return;
+  }
+
   const tableClient = await getAppTableClient();
-  await tableClient.deleteEntity(JOB_SCOPE, toRowKey(id));
+  await tableClient.upsertEntity<JobEntity>({
+    partitionKey: JOB_SCOPE,
+    rowKey: toRowKey(id),
+    type: JOB_TYPE,
+    code: existing.code,
+    title: existing.title,
+    summary: existing.summary,
+    descriptionHtml: existing.descriptionHtml,
+    department: existing.department,
+    location: existing.location,
+    employmentType: existing.employmentType,
+    workplaceType: existing.workplaceType,
+    experienceLevel: existing.experienceLevel,
+    salaryCurrency: existing.salaryCurrency,
+    salaryRange: existing.salaryRange,
+    vacancies: existing.vacancies ?? undefined,
+    maxRetryAttempts: existing.maxRetryAttempts,
+    atsEnabled: existing.atsEnabled,
+    atsRequiredKeywordsJson: JSON.stringify(existing.atsRequiredKeywords),
+    atsPreferredKeywordsJson: JSON.stringify(existing.atsPreferredKeywords),
+    atsMinimumYearsExperience: existing.atsMinimumYearsExperience ?? undefined,
+    atsRequiredEducationJson: JSON.stringify(existing.atsRequiredEducation),
+    atsRequiredCertificationsJson: JSON.stringify(existing.atsRequiredCertifications),
+    closingDate: existing.closingDate,
+    requirements: existing.requirements,
+    benefits: existing.benefits,
+    isPublished: false,
+    isDeleted: true,
+    deletedAt: Date.now(),
+    deletedBy: normalizeText(deletedBy).toLowerCase(),
+    createdAt: Date.parse(existing.createdAt),
+    updatedAt: Date.now(),
+  }, "Replace");
+};
+
+export const purgeDeletedJobs = async (olderThanMs: number) => {
+  const cutoff = Date.now() - olderThanMs;
+  const tableClient = await getAppTableClient();
+  const entities = tableClient.listEntities<JobEntity>({
+    queryOptions: {
+      filter: `PartitionKey eq '${JOB_SCOPE}' and type eq '${JOB_TYPE}'`,
+    },
+  });
+
+  let purgedCount = 0;
+
+  for await (const entity of entities) {
+    if (!entity.isDeleted || !entity.deletedAt || entity.deletedAt > cutoff) {
+      continue;
+    }
+
+    await tableClient.deleteEntity(JOB_SCOPE, entity.rowKey);
+    purgedCount += 1;
+  }
+
+  return purgedCount;
 };

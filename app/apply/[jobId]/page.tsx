@@ -6,6 +6,7 @@ import { ensureCandidateProfile } from "../../../lib/candidate-profile";
 import { getAuthSessionFromCookies } from "../../../lib/auth-session";
 import { getJobById } from "../../../lib/jobs";
 import { listCvSubmissionsByEmail } from "../../../lib/cv-storage";
+import { listChatInboxForRequester } from "../../../lib/acs-chat";
 
 export const dynamic = "force-dynamic";
 
@@ -36,9 +37,10 @@ export default async function ApplyJobPage({ params }: ApplyJobPageProps) {
     redirect(redirectPath);
   }
 
-  const [profile, submissions] = await Promise.all([
+  const [profile, submissions, chatInbox] = await Promise.all([
     ensureCandidateProfile(session.email),
     listCvSubmissionsByEmail(session.email),
+    listChatInboxForRequester(session.email),
   ]);
 
   const existingSubmission = submissions.find(
@@ -62,6 +64,7 @@ export default async function ApplyJobPage({ params }: ApplyJobPageProps) {
         job={job}
         existingSubmission={existingSubmission}
         rejectedAttempts={rejectedAttempts}
+        hasUnreadChat={Boolean(existingSubmission && chatInbox.items.find((item) => item.applicationId === existingSubmission.id)?.unread)}
       />
     </PortalShell>
   );

@@ -51,6 +51,11 @@ export function useServerInfiniteList<T>({
         setItems(page.items);
         setPageInfo(page.pageInfo);
       })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error("Failed to refresh infinite list page", error);
+        }
+      })
       .finally(() => {
         if (!cancelled) {
           setIsLoading(false);
@@ -80,6 +85,9 @@ export function useServerInfiniteList<T>({
         .then((page) => {
           setItems((current) => [...current, ...page.items]);
           setPageInfo(page.pageInfo);
+        })
+        .catch((error) => {
+          console.error("Failed to load more infinite list items", error);
         })
         .finally(() => {
           setIsLoadingMore(false);

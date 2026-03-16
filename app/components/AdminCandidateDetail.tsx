@@ -38,6 +38,10 @@ const renderAtsBadge = (submission: Pick<CvSubmissionRecord, "atsStatus" | "atsS
   return <span className="text-xs text-slate-500">ATS not configured</span>;
 };
 
+const hasSuccessfulAtsResult = (submission: Pick<CvSubmissionRecord, "atsStatus" | "atsScore">) => {
+  return submission.atsStatus === "success" && submission.atsScore !== null;
+};
+
 type AdminCandidateDetailProps = {
   sessionEmail: string;
   candidate: CandidateProfile;
@@ -161,6 +165,19 @@ export function AdminCandidateDetail({
     } finally {
       setRecalculatingAtsId(null);
     }
+  };
+
+  const queueAtsRecalculation = (submission: CvSubmissionRecord) => {
+    setConfirmAction({
+      title: "Recalculate ATS?",
+      message: "This will queue a fresh ATS evaluation for the current CV using the latest ATS criteria configured on this job.",
+      confirmLabel: "Recalculate ATS",
+      loadingLabel: "Queueing ATS...",
+      tone: "neutral",
+      onConfirm: async () => {
+        await recalculateAts(submission.id);
+      },
+    });
   };
 
   return (
@@ -298,22 +315,32 @@ export function AdminCandidateDetail({
                           View Job
                         </Link>
                       )}
+                      {submission.reviewStatus === "accepted" ? (
+                        <Link
+                          href={`/admin/chat/${submission.id}`}
+                          className="theme-action-button theme-action-button-secondary rounded-xl px-3 py-2 text-sm"
+                        >
+                          Open Chat
+                        </Link>
+                      ) : null}
                       {canSubmissionAtsBeRecalculated(submission, jobsById[submission.jobId] ?? null) ? (
                         <button
                           type="button"
-                          onClick={() => void recalculateAts(submission.id)}
+                          onClick={() => queueAtsRecalculation(submission)}
                           className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
                         >
                           {recalculatingAtsId === submission.id ? "Recalculating ATS..." : "Recalculate ATS"}
                         </button>
                       ) : null}
-                      <button
-                        type="button"
-                        onClick={() => setActiveAtsDetails(submission)}
-                        className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
-                      >
-                        View ATS
-                      </button>
+                      {hasSuccessfulAtsResult(submission) ? (
+                        <button
+                          type="button"
+                          onClick={() => setActiveAtsDetails(submission)}
+                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+                        >
+                          View ATS
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => setActivePreview(submission)}

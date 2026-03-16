@@ -1,7 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { AdminAccount } from "../../lib/admin-access";
 import type { AdminAuditLogRecord } from "../../lib/audit-log";
 import type { PageInfo } from "../../lib/pagination";
@@ -75,7 +75,7 @@ export function AdminAuditPortal({
   const { viewMode, setViewMode } = usePersistedViewMode("admin-audit-view-mode", "table");
   const resetKey = `${actorFilter}|${searchQuery}|${tablePageSize}`;
 
-  const fetchPage = async (cursor?: string) => {
+  const fetchPage = useCallback(async (cursor?: string) => {
     const response = await fetch(`/api/admin/audit?${createQueryString({
       limit: tablePageSize,
       cursor,
@@ -92,7 +92,7 @@ export function AdminAuditPortal({
     }
 
     return payload;
-  };
+  }, [actorFilter, searchQuery, tablePageSize]);
 
   const {
     items,

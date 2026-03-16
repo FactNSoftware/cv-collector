@@ -92,6 +92,7 @@ export function JobEditorForm({
     initialJob ? toJobFormState(initialJob) : EMPTY_JOB_FORM,
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [submitMode, setSubmitMode] = useState<"stay" | "exit">("stay");
   const [isPreviewNavigating, setIsPreviewNavigating] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const { showToast } = useToast();
@@ -166,6 +167,13 @@ export function JobEditorForm({
         window.sessionStorage.removeItem(previewStorageKey);
       }
       showToast("Job saved successfully.");
+      if (submitMode === "exit") {
+        window.location.href = mode === "edit"
+          ? `/admin/jobs/${savedJob.id}/candidates`
+          : "/admin/jobs";
+        return;
+      }
+
       window.location.href = `/admin/jobs/${savedJob.id}/edit`;
       return;
     }
@@ -368,28 +376,16 @@ export function JobEditorForm({
                       className="w-full rounded-xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]"
                     />
                   </label>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <label className="block">
-                      <span className="mb-2 block text-sm font-semibold text-slate-800">Minimum years</span>
-                      <input
-                        type="number"
-                        min={0}
-                        value={jobForm.atsMinimumYearsExperience}
-                        onChange={(event) => setJobForm((current) => ({ ...current, atsMinimumYearsExperience: event.target.value }))}
-                        className="h-12 w-full rounded-xl border border-[var(--color-border)] bg-white px-4 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]"
-                      />
-                    </label>
-                    <label className="block md:col-span-2">
-                      <span className="mb-2 block text-sm font-semibold text-slate-800">Required education</span>
-                      <textarea
-                        value={jobForm.atsRequiredEducation}
-                        onChange={(event) => setJobForm((current) => ({ ...current, atsRequiredEducation: event.target.value }))}
-                        rows={3}
-                        placeholder={"One required education signal per line.\nExample:\nBSc Computer Science\nSoftware Engineering degree"}
-                        className="w-full rounded-xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]"
-                      />
-                    </label>
-                  </div>
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-semibold text-slate-800">Required education</span>
+                    <textarea
+                      value={jobForm.atsRequiredEducation}
+                      onChange={(event) => setJobForm((current) => ({ ...current, atsRequiredEducation: event.target.value }))}
+                      rows={3}
+                      placeholder={"One required education signal per line.\nExample:\nBSc Computer Science\nSoftware Engineering degree"}
+                      className="w-full rounded-xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]"
+                    />
+                  </label>
                   <label className="block">
                     <span className="mb-2 block text-sm font-semibold text-slate-800">Required certifications</span>
                     <textarea
@@ -401,6 +397,19 @@ export function JobEditorForm({
                     />
                     <p className="mt-2 text-xs leading-5 text-slate-500">
                       These requirements are stored separately so admins can review missing hard signals clearly.
+                    </p>
+                  </label>
+                  <label className="block max-w-sm">
+                    <span className="mb-2 block text-sm font-semibold text-slate-800">Minimum relevant experience (years)</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={jobForm.atsMinimumYearsExperience}
+                      onChange={(event) => setJobForm((current) => ({ ...current, atsMinimumYearsExperience: event.target.value }))}
+                      className="h-12 w-full rounded-xl border border-[var(--color-border)] bg-white px-4 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]"
+                    />
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      Set the minimum relevant experience expected for this role. Use <span className="font-semibold">0</span> if you do not want experience to act as a hard requirement.
                     </p>
                   </label>
                 </>
@@ -474,8 +483,29 @@ export function JobEditorForm({
                 >
                   Cancel
                 </Link>
-                <button type="submit" disabled={isSaving} className="theme-btn-primary h-12 rounded-xl px-5 text-sm font-medium disabled:opacity-70">
-                  {isSaving ? "Saving..." : mode === "edit" ? "Update Job" : "Create Job"}
+                <button
+                  type="submit"
+                  onClick={() => setSubmitMode("stay")}
+                  disabled={isSaving}
+                  className="rounded-xl border border-[var(--color-border)] bg-white px-5 py-3 text-sm font-medium text-[var(--color-ink)] disabled:opacity-70"
+                >
+                  {isSaving && submitMode === "stay"
+                    ? "Saving..."
+                    : mode === "edit"
+                      ? "Update Job"
+                      : "Save Job"}
+                </button>
+                <button
+                  type="submit"
+                  onClick={() => setSubmitMode("exit")}
+                  disabled={isSaving}
+                  className="theme-btn-primary h-12 rounded-xl px-5 text-sm font-medium disabled:opacity-70"
+                >
+                  {isSaving && submitMode === "exit"
+                    ? "Saving..."
+                    : mode === "edit"
+                      ? "Update and Exit"
+                      : "Save and Exit"}
                 </button>
               </div>
             </div>

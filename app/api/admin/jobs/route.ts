@@ -89,6 +89,12 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as JobPayload;
+    const atsEnabled = Boolean(body.atsEnabled);
+    const atsRequiredKeywords = parseAtsKeywordInput(body.atsRequiredKeywords);
+    const atsPreferredKeywords = parseAtsKeywordInput(body.atsPreferredKeywords);
+    const atsRequiredEducation = parseAtsKeywordInput(body.atsRequiredEducation);
+    const atsRequiredCertifications = parseAtsKeywordInput(body.atsRequiredCertifications);
+    const atsMinimumYearsExperience = typeof body.atsMinimumYearsExperience === "number" ? body.atsMinimumYearsExperience : null;
 
     if (!body.title?.trim()) {
       return NextResponse.json({ message: "Job title is required." }, { status: 400 });
@@ -107,12 +113,12 @@ export async function POST(request: Request) {
       salaryRange: body.salaryRange ?? "",
       vacancies: typeof body.vacancies === "number" ? body.vacancies : null,
       maxRetryAttempts: typeof body.maxRetryAttempts === "number" ? body.maxRetryAttempts : 0,
-      atsEnabled: Boolean(body.atsEnabled),
-      atsRequiredKeywords: parseAtsKeywordInput(body.atsRequiredKeywords),
-      atsPreferredKeywords: parseAtsKeywordInput(body.atsPreferredKeywords),
-      atsMinimumYearsExperience: typeof body.atsMinimumYearsExperience === "number" ? body.atsMinimumYearsExperience : null,
-      atsRequiredEducation: parseAtsKeywordInput(body.atsRequiredEducation),
-      atsRequiredCertifications: parseAtsKeywordInput(body.atsRequiredCertifications),
+      atsEnabled,
+      atsRequiredKeywords,
+      atsPreferredKeywords,
+      atsMinimumYearsExperience,
+      atsRequiredEducation,
+      atsRequiredCertifications,
       closingDate: body.closingDate ?? "",
       requirements: body.requirements ?? "",
       benefits: body.benefits ?? "",

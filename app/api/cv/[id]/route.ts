@@ -22,7 +22,7 @@ export async function DELETE(
       return NextResponse.json({ message: "Application not found." }, { status: 404 });
     }
 
-    await deleteCvSubmission(id);
+    await deleteCvSubmission(id, auth.session.email);
 
     return NextResponse.json({
       message: "Application withdrawn successfully. You can apply again now.",

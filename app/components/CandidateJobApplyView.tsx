@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FileUp } from "lucide-react";
 import { ChangeEvent, FormEvent, useRef, useState } from "react";
 import type { CandidateProfile } from "../../lib/candidate-profile";
@@ -18,6 +19,7 @@ type CandidateJobApplyViewProps = {
   job: JobRecord;
   existingSubmission: CvSubmissionRecord | null;
   rejectedAttempts: CvSubmissionRecord[];
+  hasUnreadChat: boolean;
 };
 
 type ProfileValues = {
@@ -49,6 +51,7 @@ export function CandidateJobApplyView({
   job,
   existingSubmission,
   rejectedAttempts,
+  hasUnreadChat,
 }: CandidateJobApplyViewProps) {
   const savedProfileValues = toProfileValues(initialProfile);
   const [profileValues, setProfileValues] = useState<ProfileValues>(toProfileValues(initialProfile));
@@ -302,14 +305,29 @@ export function CandidateJobApplyView({
                 ? "Your application has been accepted. We will inform you soon with the next steps."
                 : `You already applied for this job on ${new Date(submission.submittedAt).toLocaleString()}. Withdraw this application if you want to apply again with an updated CV.`}
             </p>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+              {hasUnreadChat ? (
+                <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700">
+                  New chat message
+                </span>
+              ) : null}
+              {submission.reviewStatus === "accepted" ? (
+                <Link
+                  href={`/applications/chat/${submission.id}`}
+                  className={`theme-action-button rounded-2xl px-4 py-2 text-sm ${
+                    hasUnreadChat ? "theme-btn-primary" : ""
+                  }`}
+                >
+                  {hasUnreadChat ? "Open Chat • New" : "Open Chat"}
+                </Link>
+              ) : null}
               <a
                 href="#"
                 onClick={(event) => {
                   event.preventDefault();
                   setIsCvPreviewOpen(true);
                 }}
-                className="rounded-2xl border border-emerald-300 px-4 py-2 text-sm font-medium text-emerald-900"
+                className="theme-action-button theme-action-button-secondary rounded-2xl px-4 py-2 text-sm"
               >
                 View CV
               </a>
@@ -317,7 +335,7 @@ export function CandidateJobApplyView({
                 <button
                   type="button"
                   onClick={() => setIsWithdrawConfirmOpen(true)}
-                  className="rounded-2xl border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700"
+                  className="theme-action-button theme-action-button-danger rounded-2xl px-4 py-2 text-sm"
                 >
                   Withdraw Application
                 </button>

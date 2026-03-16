@@ -39,6 +39,8 @@ export function useServerPagination<T>({
       setItems(page.items);
       setPageInfo(page.pageInfo);
       setCursorHistory(nextHistory);
+    } catch (error) {
+      console.error("Failed to load paginated data", error);
     } finally {
       setIsLoading(false);
     }

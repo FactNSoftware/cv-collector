@@ -90,14 +90,14 @@ export async function DELETE(request: Request, context: RouteContext) {
       );
     }
 
-    await deleteAdminAccount(targetEmail);
+    await deleteAdminAccount(targetEmail, auth.session.email);
 
     await recordAdminAuditEvent({
       actorEmail: auth.session.email,
       action: "admin.delete",
       targetType: "admin_account",
       targetId: targetEmail,
-      summary: `Removed admin access for ${targetEmail}`,
+      summary: `Soft-deleted admin access for ${targetEmail}`,
       requestMethod: request.method,
       requestPath: new URL(request.url).pathname,
       userAgent: request.headers.get("user-agent") ?? "",

@@ -73,6 +73,7 @@ export const enqueueAtsProcessing = async ({
   submissionId: string;
   reason: string;
 }) => {
+  console.info("[ATS] Queueing ATS processing.", { submissionId, reason });
   const tableClient = await getAppTableClient();
   const now = Date.now();
 
@@ -110,6 +111,11 @@ const deleteQueueJob = async (job: AtsQueueJob) => {
 };
 
 const processQueueJob = async (job: AtsQueueJob) => {
+  console.info("[ATS] Processing queue job.", {
+    submissionId: job.submissionId,
+    reason: job.reason,
+    attemptCount: job.attemptCount,
+  });
   const submission = await getCvSubmissionById(job.submissionId);
 
   if (!submission) {
@@ -151,9 +157,19 @@ const processQueueJob = async (job: AtsQueueJob) => {
       evaluation,
       getJobAtsConfigSignature(relatedJob),
     );
+    console.info("[ATS] Queue job completed.", {
+      submissionId: submission.id,
+      atsStatus: evaluation.method === "none" ? "none" : "success",
+      atsMethod: evaluation.method,
+      atsScore: evaluation.score,
+    });
     await deleteQueueJob(processingJob);
   } catch (error) {
     const message = error instanceof Error ? error.message : "ATS processing failed.";
+    console.error("[ATS] Queue job failed.", {
+      submissionId: submission.id,
+      error: message,
+    });
 
     await markCvSubmissionAtsFailed(submission.id, message);
     await updateQueueJob(processingJob, {
@@ -172,11 +188,12 @@ const processPendingAtsJobs = async (limit = 3) => {
   }
 };
 
-export const triggerAtsQueueProcessing = ({ limit = 3 }: { limit?: number; reason: string }) => {
+export const triggerAtsQueueProcessing = ({ limit = 3, reason }: { limit?: number; reason: string }) => {
   if (activeProcessingPromise) {
     return activeProcessingPromise;
   }
 
+  console.info("[ATS] Triggering queue processing.", { limit, reason });
   activeProcessingPromise = (async () => {
     try {
       await processPendingAtsJobs(limit);

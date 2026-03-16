@@ -163,6 +163,12 @@ export async function POST(request: Request) {
     });
 
     if (matchingJob.atsEnabled) {
+      console.info("[ATS] Submission created with ATS enabled; enqueuing job.", {
+        submissionId: created.id,
+        jobId: matchingJob.id,
+        jobCode: matchingJob.code,
+        candidateEmail: created.email,
+      });
       await enqueueAtsProcessing({
         submissionId: created.id,
         reason: "submission",
@@ -170,6 +176,12 @@ export async function POST(request: Request) {
       void triggerAtsQueueProcessing({
         reason: "submission",
         limit: 2,
+      });
+    } else {
+      console.info("[ATS] Submission created with ATS disabled for the job.", {
+        submissionId: created.id,
+        jobId: matchingJob.id,
+        jobCode: matchingJob.code,
       });
     }
 

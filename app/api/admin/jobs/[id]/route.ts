@@ -45,6 +45,12 @@ export async function PATCH(
     const { id } = await context.params;
     const existingJob = await getJobById(id);
     const body = (await request.json()) as JobPayload;
+    const atsEnabled = Boolean(body.atsEnabled);
+    const atsRequiredKeywords = parseAtsKeywordInput(body.atsRequiredKeywords);
+    const atsPreferredKeywords = parseAtsKeywordInput(body.atsPreferredKeywords);
+    const atsRequiredEducation = parseAtsKeywordInput(body.atsRequiredEducation);
+    const atsRequiredCertifications = parseAtsKeywordInput(body.atsRequiredCertifications);
+    const atsMinimumYearsExperience = typeof body.atsMinimumYearsExperience === "number" ? body.atsMinimumYearsExperience : null;
 
     if (!body.title?.trim()) {
       return NextResponse.json({ message: "Job title is required." }, { status: 400 });
@@ -64,12 +70,12 @@ export async function PATCH(
       salaryRange: body.salaryRange ?? "",
       vacancies: typeof body.vacancies === "number" ? body.vacancies : null,
       maxRetryAttempts: typeof body.maxRetryAttempts === "number" ? body.maxRetryAttempts : 0,
-      atsEnabled: Boolean(body.atsEnabled),
-      atsRequiredKeywords: parseAtsKeywordInput(body.atsRequiredKeywords),
-      atsPreferredKeywords: parseAtsKeywordInput(body.atsPreferredKeywords),
-      atsMinimumYearsExperience: typeof body.atsMinimumYearsExperience === "number" ? body.atsMinimumYearsExperience : null,
-      atsRequiredEducation: parseAtsKeywordInput(body.atsRequiredEducation),
-      atsRequiredCertifications: parseAtsKeywordInput(body.atsRequiredCertifications),
+      atsEnabled,
+      atsRequiredKeywords,
+      atsPreferredKeywords,
+      atsMinimumYearsExperience,
+      atsRequiredEducation,
+      atsRequiredCertifications,
       closingDate: body.closingDate ?? "",
       requirements: body.requirements ?? "",
       benefits: body.benefits ?? "",
@@ -126,14 +132,14 @@ export async function DELETE(
   try {
     const { id } = await context.params;
     const job = await getJobById(id);
-    await deleteJob(id);
+    await deleteJob(id, auth.session.email);
 
     await recordAdminAuditEvent({
       actorEmail: auth.session.email,
       action: "job.delete",
       targetType: "job",
       targetId: id,
-      summary: job ? `Deleted job ${job.code} - ${job.title}` : `Deleted job ${id}`,
+      summary: job ? `Soft-deleted job ${job.code} - ${job.title}` : `Soft-deleted job ${id}`,
       requestMethod: request.method,
       requestPath: new URL(request.url).pathname,
       userAgent: request.headers.get("user-agent") ?? "",

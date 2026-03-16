@@ -50,6 +50,10 @@ const renderAtsBadge = (submission: Pick<CvSubmissionRecord, "atsStatus" | "atsS
   return <span className="text-xs text-[var(--color-muted)]">Not scored</span>;
 };
 
+const hasSuccessfulAtsResult = (submission: Pick<CvSubmissionRecord, "atsStatus" | "atsScore">) => {
+  return submission.atsStatus === "success" && submission.atsScore !== null;
+};
+
 const getDecisionBandLabel = (band: CvSubmissionRecord["atsDecisionBand"]) => {
   switch (band) {
     case "best_match":
@@ -95,6 +99,7 @@ export function AdminJobCandidates({
   job,
   submissions,
 }: AdminJobCandidatesProps) {
+  type RankedSubmission = CvSubmissionRecord & { ranking: number; rankingLabel: string | null };
   type AtsFilterValue = "all" | "80_plus" | "60_79" | "40_59" | "below_40" | "not_scored";
   type FitFilterValue = "all" | "best_match" | "strong_match" | "qualified" | "needs_review" | "low_match";
   type ReviewFilterValue = "all" | "pending" | "accepted" | "rejected";
@@ -107,6 +112,7 @@ export function AdminJobCandidates({
   const [fitFilter, setFitFilter] = useState<FitFilterValue>("all");
   const [reviewFilter, setReviewFilter] = useState<ReviewFilterValue>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSubmissionIds, setSelectedSubmissionIds] = useState<string[]>([]);
   const [recalculatingAtsId, setRecalculatingAtsId] = useState<string | null>(null);
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
   const [activePreview, setActivePreview] = useState<CvSubmissionRecord | null>(null);
@@ -128,6 +134,10 @@ export function AdminJobCandidates({
 
   useEffect(() => {
     setItems(submissions);
+  }, [submissions]);
+
+  useEffect(() => {
+    setSelectedSubmissionIds((current) => current.filter((id) => submissions.some((item) => item.id === id)));
   }, [submissions]);
 
   const hasAtsInFlight = useMemo(
@@ -236,10 +246,28 @@ export function AdminJobCandidates({
     }));
   }, [job.atsEnabled, visibleItems]);
 
+  const recalculableVisibleItems = useMemo(
+    () => rankedItems.filter((item) => canSubmissionAtsBeRecalculated(item, job)),
+    [job, rankedItems],
+  );
+
+  const selectedRecalculableItems = useMemo(
+    () => rankedItems.filter((item) => selectedSubmissionIds.includes(item.id) && canSubmissionAtsBeRecalculated(item, job)),
+    [job, rankedItems, selectedSubmissionIds],
+  );
+
   const paginatedTableItems = useMemo(() => {
     const startIndex = tablePageIndex * tablePageSize;
     return rankedItems.slice(startIndex, startIndex + tablePageSize);
   }, [rankedItems, tablePageIndex, tablePageSize]);
+
+  const paginatedRecalculableItems = useMemo(
+    () => paginatedTableItems.filter((item) => canSubmissionAtsBeRecalculated(item, job)),
+    [job, paginatedTableItems],
+  );
+
+  const allVisibleTableRowsSelected = paginatedRecalculableItems.length > 0
+    && paginatedRecalculableItems.every((item) => selectedSubmissionIds.includes(item.id));
 
   const updateReviewStatus = useCallback(async (
     id: string,
@@ -312,6 +340,131 @@ export function AdminJobCandidates({
     }
   }, [recalculatingAtsId, router, showToast]);
 
+  const toggleSubmissionSelection = useCallback((submissionId: string) => {
+    setSelectedSubmissionIds((current) => (
+      current.includes(submissionId)
+        ? current.filter((id) => id !== submissionId)
+        : [...current, submissionId]
+    ));
+  }, []);
+
+  const setSelectedVisibleTableRows = useCallback((checked: boolean) => {
+    setSelectedSubmissionIds((current) => {
+      const currentIds = new Set(current);
+
+      if (checked) {
+        for (const item of paginatedRecalculableItems) {
+          currentIds.add(item.id);
+        }
+      } else {
+        for (const item of paginatedRecalculableItems) {
+          currentIds.delete(item.id);
+        }
+      }
+
+      return [...currentIds];
+    });
+  }, [paginatedRecalculableItems]);
+
+  const setSelectedVisibleCards = useCallback((checked: boolean) => {
+    setSelectedSubmissionIds((current) => {
+      const currentIds = new Set(current);
+
+      if (checked) {
+        for (const item of recalculableVisibleItems) {
+          currentIds.add(item.id);
+        }
+      } else {
+        for (const item of recalculableVisibleItems) {
+          currentIds.delete(item.id);
+        }
+      }
+
+      return [...currentIds];
+    });
+  }, [recalculableVisibleItems]);
+
+  const queueAtsRecalculation = useCallback((submission: CvSubmissionRecord) => {
+    setConfirmAction({
+      title: "Recalculate ATS?",
+      message: "This will queue a fresh ATS evaluation for the current CV using the latest ATS criteria configured on this job.",
+      confirmLabel: "Recalculate ATS",
+      loadingLabel: "Queueing ATS...",
+      tone: "neutral",
+      onConfirm: async () => {
+        await recalculateAts(submission.id);
+      },
+    });
+  }, [recalculateAts]);
+
+  const queueSelectedAtsRecalculation = useCallback(() => {
+    if (selectedRecalculableItems.length === 0) {
+      showToast("Select at least one application that can be recalculated.", "error");
+      return;
+    }
+
+    setConfirmAction({
+      title: "Recalculate selected ATS results?",
+      message: `This will queue a fresh ATS evaluation for ${selectedRecalculableItems.length} selected application${selectedRecalculableItems.length === 1 ? "" : "s"} using the latest ATS criteria configured on this job.`,
+      confirmLabel: "Recalculate Selected",
+      loadingLabel: "Queueing ATS...",
+      tone: "neutral",
+      onConfirm: async () => {
+        const results = await Promise.allSettled(
+          selectedRecalculableItems.map(async (submission) => {
+            const response = await fetch(`/api/admin/applications/${submission.id}`, {
+              method: "POST",
+            });
+            const payload = await response
+              .json()
+              .catch(() => ({ message: "Failed to recalculate ATS." }));
+
+            if (!response.ok) {
+              throw new Error(payload.message || "Failed to recalculate ATS.");
+            }
+
+            return {
+              id: submission.id,
+              item: payload.item as CvSubmissionRecord,
+            };
+          }),
+        );
+
+        const updatedItems = new Map<string, CvSubmissionRecord>();
+        const failureMessages: string[] = [];
+
+        for (const result of results) {
+          if (result.status === "fulfilled") {
+            updatedItems.set(result.value.id, result.value.item);
+          } else {
+            failureMessages.push(result.reason instanceof Error ? result.reason.message : "Failed to recalculate ATS.");
+          }
+        }
+
+        if (updatedItems.size > 0) {
+          setItems((current) => current.map((item) => updatedItems.get(item.id) ?? item));
+          setSelectedSubmissionIds((current) => current.filter((id) => !updatedItems.has(id)));
+          router.refresh();
+        }
+
+        if (updatedItems.size > 0 && failureMessages.length === 0) {
+          showToast(`Queued ATS recalculation for ${updatedItems.size} application${updatedItems.size === 1 ? "" : "s"}.`);
+          return;
+        }
+
+        if (updatedItems.size > 0) {
+          showToast(
+            `Queued ATS recalculation for ${updatedItems.size} application${updatedItems.size === 1 ? "" : "s"}. ${failureMessages[0]}`,
+            "error",
+          );
+          return;
+        }
+
+        showToast(failureMessages[0] || "Failed to recalculate ATS.", "error");
+      },
+    });
+  }, [router, selectedRecalculableItems, showToast]);
+
   const downloadAllCvs = async () => {
     if (items.length === 0 || isDownloadingZip) {
       return;
@@ -347,7 +500,34 @@ export function AdminJobCandidates({
     }
   };
 
-  const columns = useMemo<ColumnDef<(CvSubmissionRecord & { ranking: number; rankingLabel: string | null })>[]>(() => [
+  const columns = useMemo<ColumnDef<RankedSubmission>[]>(() => [
+    ...(job.atsEnabled ? [{
+      id: "select",
+      header: () => (
+        <input
+          type="checkbox"
+          aria-label="Select all visible applications"
+          checked={allVisibleTableRowsSelected}
+          disabled={paginatedRecalculableItems.length === 0}
+          onChange={(event) => setSelectedVisibleTableRows(event.target.checked)}
+          className="h-4 w-4 rounded border border-[var(--color-border)] accent-[var(--color-brand)]"
+          title={paginatedRecalculableItems.length === 0 ? "No visible pending applications can be recalculated." : "Select all visible recalculable applications"}
+        />
+      ),
+      cell: ({ row }: { row: { original: RankedSubmission } }) => (
+        <input
+          type="checkbox"
+          aria-label={`Select ${row.original.email}`}
+          checked={selectedSubmissionIds.includes(row.original.id)}
+          disabled={!canSubmissionAtsBeRecalculated(row.original, job)}
+          onChange={() => toggleSubmissionSelection(row.original.id)}
+          className="mt-1 h-4 w-4 rounded border border-[var(--color-border)] accent-[var(--color-brand)]"
+          title={canSubmissionAtsBeRecalculated(row.original, job)
+            ? "Select this application for ATS recalculation"
+            : "Only pending applications can be selected for ATS recalculation."}
+        />
+      ),
+    } satisfies ColumnDef<RankedSubmission>] : []),
     {
       id: "ranking",
       header: "#",
@@ -453,18 +633,27 @@ export function AdminJobCandidates({
             icon: <Users className="h-4 w-4" />,
             href: `/admin/candidates/${encodeURIComponent(submission.email)}`,
           },
+          ...(submission.reviewStatus === "accepted"
+            ? [{
+                label: "Open Chat",
+                icon: <FileText className="h-4 w-4" />,
+                href: `/admin/chat/${submission.id}`,
+              }]
+            : []),
           ...(canSubmissionAtsBeRecalculated(submission, job)
             ? [{
                 label: recalculatingAtsId === submission.id ? "Recalculating ATS..." : "Recalculate ATS",
                 icon: <RefreshCcw className="h-4 w-4" />,
-                onSelect: () => void recalculateAts(submission.id),
+                onSelect: () => queueAtsRecalculation(submission),
               }]
             : []),
-          {
-            label: "View ATS",
-            icon: <FileText className="h-4 w-4" />,
-            onSelect: () => setActiveAtsDetails(submission),
-          },
+          ...(hasSuccessfulAtsResult(submission)
+            ? [{
+                label: "View ATS",
+                icon: <FileText className="h-4 w-4" />,
+                onSelect: () => setActiveAtsDetails(submission),
+              }]
+            : []),
           {
             label: "View CV",
             icon: <FileArchive className="h-4 w-4" />,
@@ -490,7 +679,18 @@ export function AdminJobCandidates({
         return <AdminRowActionMenu items={items} />;
       },
     },
-  ], [deleteApplication, job, recalculateAts, recalculatingAtsId, updateReviewStatus]);
+  ], [
+    allVisibleTableRowsSelected,
+    deleteApplication,
+    job,
+    paginatedRecalculableItems.length,
+    queueAtsRecalculation,
+    recalculatingAtsId,
+    selectedSubmissionIds,
+    setSelectedVisibleTableRows,
+    toggleSubmissionSelection,
+    updateReviewStatus,
+  ]);
 
   return (
     <PortalShell
@@ -589,6 +789,19 @@ export function AdminJobCandidates({
                 ) : null}
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                {job.atsEnabled ? (
+                  <button
+                    type="button"
+                    onClick={queueSelectedAtsRecalculation}
+                    disabled={selectedRecalculableItems.length === 0}
+                    className="theme-action-button theme-action-button-secondary inline-flex items-center justify-center rounded-2xl px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    title={selectedRecalculableItems.length === 0 ? "Select at least one pending application to recalculate ATS." : "Queue ATS recalculation for the selected applications"}
+                  >
+                    <RefreshCcw className="mr-2 h-4 w-4" />
+                    Recalculate Selected ATS
+                    {selectedRecalculableItems.length > 0 ? ` (${selectedRecalculableItems.length})` : ""}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => setConfirmAction({
@@ -637,11 +850,33 @@ export function AdminJobCandidates({
             </div>
           ) : (
             <div className="mt-5 space-y-3">
+              {job.atsEnabled && recalculableVisibleItems.length > 0 ? (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedVisibleCards(!recalculableVisibleItems.every((item) => selectedSubmissionIds.includes(item.id)))}
+                    className="theme-action-button theme-action-button-secondary rounded-xl px-3 py-2 text-sm"
+                  >
+                    {recalculableVisibleItems.every((item) => selectedSubmissionIds.includes(item.id))
+                      ? "Clear Visible Selection"
+                      : "Select Visible Applications"}
+                  </button>
+                </div>
+              ) : null}
               {rankedItems.length > 0 ? rankedItems.map((submission) => (
                 <article key={submission.id} className="rounded-[22px] border border-slate-200 bg-slate-50 px-5 py-4">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
+                        {canSubmissionAtsBeRecalculated(submission, job) ? (
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${submission.email}`}
+                            checked={selectedSubmissionIds.includes(submission.id)}
+                            onChange={() => toggleSubmissionSelection(submission.id)}
+                            className="h-4 w-4 rounded border border-[var(--color-border)] accent-[var(--color-brand)]"
+                          />
+                        ) : null}
                         <h3 className="text-lg font-semibold text-slate-900">
                           {[submission.firstName, submission.lastName].filter(Boolean).join(" ") || submission.email}
                         </h3>
@@ -719,22 +954,32 @@ export function AdminJobCandidates({
                       >
                         View Candidate
                       </Link>
+                      {submission.reviewStatus === "accepted" ? (
+                        <Link
+                          href={`/admin/chat/${submission.id}`}
+                          className="theme-action-button theme-action-button-secondary rounded-xl px-3 py-2 text-sm"
+                        >
+                          Open Chat
+                        </Link>
+                      ) : null}
                       {canSubmissionAtsBeRecalculated(submission, job) ? (
                         <button
                           type="button"
-                          onClick={() => void recalculateAts(submission.id)}
+                          onClick={() => queueAtsRecalculation(submission)}
                           className="theme-action-button theme-action-button-secondary rounded-xl px-3 py-2 text-sm"
                         >
                           {recalculatingAtsId === submission.id ? "Recalculating ATS..." : "Recalculate ATS"}
                         </button>
                       ) : null}
-                      <button
-                        type="button"
-                        onClick={() => setActiveAtsDetails(submission)}
-                        className="theme-action-button theme-action-button-secondary rounded-xl px-3 py-2 text-sm"
-                      >
-                        View ATS
-                      </button>
+                      {hasSuccessfulAtsResult(submission) ? (
+                        <button
+                          type="button"
+                          onClick={() => setActiveAtsDetails(submission)}
+                          className="theme-action-button theme-action-button-secondary rounded-xl px-3 py-2 text-sm"
+                        >
+                          View ATS
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => setActivePreview(submission)}

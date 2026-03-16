@@ -1,21 +1,25 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { PortalShell } from "./PortalShell";
 import { CandidateCvPreviewModal } from "./CandidateCvPreviewModal";
 import type { CvSubmissionRecord } from "../../lib/cv-storage";
+import type { ChatInboxItem } from "../../lib/acs-chat";
 import { useToast } from "./ToastProvider";
 import { useInfiniteList } from "./useInfiniteList";
 
 type CandidateApplicationsHistoryProps = {
   sessionEmail: string;
   submissions: CvSubmissionRecord[];
+  chatItems: ChatInboxItem[];
 };
 
 export function CandidateApplicationsHistory({
   sessionEmail,
   submissions,
+  chatItems,
 }: CandidateApplicationsHistoryProps) {
   const [items, setItems] = useState(submissions);
   const [searchQuery, setSearchQuery] = useState("");
@@ -23,6 +27,9 @@ export function CandidateApplicationsHistory({
   const [activePreview, setActivePreview] = useState<CvSubmissionRecord | null>(null);
   const [pendingWithdrawId, setPendingWithdrawId] = useState<string | null>(null);
   const { showToast } = useToast();
+  const chatByApplicationId = useMemo(() => (
+    new Map(chatItems.map((item) => [item.applicationId, item] as const))
+  ), [chatItems]);
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
@@ -104,7 +111,14 @@ export function CandidateApplicationsHistory({
         ) : (
           <div className="space-y-3">
             {visibleItems.map((submission) => (
-              <article key={submission.id} className="rounded-[24px] border border-[var(--color-border)] bg-white p-5">
+              <article
+                key={submission.id}
+                className={`rounded-[24px] border bg-white p-5 ${
+                  chatByApplicationId.get(submission.id)?.unread
+                    ? "border-rose-200 shadow-[0_10px_30px_rgba(225,29,72,0.08)]"
+                    : "border-[var(--color-border)]"
+                }`}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -143,13 +157,30 @@ export function CandidateApplicationsHistory({
                           Reason: {submission.rejectionReason}
                         </span>
                       ) : null}
+                      {chatByApplicationId.get(submission.id)?.unread ? (
+                        <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700">
+                          New chat message
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {submission.reviewStatus === "accepted" ? (
+                      <Link
+                        href={`/applications/chat/${submission.id}`}
+                        className={`theme-action-button rounded-2xl px-4 py-2 text-sm ${
+                          chatByApplicationId.get(submission.id)?.unread
+                            ? "theme-btn-primary"
+                            : "theme-action-button-secondary"
+                        }`}
+                      >
+                        {chatByApplicationId.get(submission.id)?.unread ? "Open Chat • New" : "Open Chat"}
+                      </Link>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => setActivePreview(submission)}
-                      className="rounded-2xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-ink)]"
+                      className="theme-action-button theme-action-button-secondary rounded-2xl px-4 py-2 text-sm"
                     >
                       View CV
                     </button>
@@ -157,7 +188,7 @@ export function CandidateApplicationsHistory({
                       <button
                         type="button"
                         onClick={() => setPendingWithdrawId(submission.id)}
-                        className="rounded-2xl border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700"
+                        className="theme-action-button theme-action-button-danger rounded-2xl px-4 py-2 text-sm"
                       >
                         Withdraw
                       </button>

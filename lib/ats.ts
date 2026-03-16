@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import { pathToFileURL } from "url";
 import { z } from "zod";
-import type { JobRecord } from "./jobs";
+import { hasEffectiveAtsCriteria, type JobRecord } from "./jobs";
 
 const DEFAULT_ATS_MODEL = "gpt-4o-mini";
 const MAX_RESUME_TEXT_CHARS = 20_000;
@@ -75,8 +75,51 @@ const normalizeKeyword = (value: string) => {
   return value.trim().replace(/\s+/g, " ");
 };
 
+const NORMALIZED_TERM_PATTERNS: Array<[RegExp, string]> = [
+  [/\breact(?:\.js| js|js)?\b/gi, "react"],
+  [/\bnext(?:\.js| js|js)?\b/gi, "nextjs"],
+  [/\bnode(?:\.js| js|js)?\b/gi, "nodejs"],
+  [/\bjava\s*script\b/gi, "javascript"],
+  [/\bjs\b/gi, "javascript"],
+  [/\btype\s*script\b/gi, "typescript"],
+  [/\bts\b/gi, "typescript"],
+  [/\brest(?:ful)?\s+apis?\b/gi, "rest api"],
+  [/\brestful\b/gi, "rest api"],
+  [/\bapis?\b/gi, "api"],
+  [/\bgraph\s*ql\b/gi, "graphql"],
+  [/\bci\s*\/?\s*cd\b/gi, "ci cd"],
+  [/\baws\b|\bamazon web services\b/gi, "aws"],
+  [/\bmicrosoft azure\b|\bazure cloud\b/gi, "azure"],
+  [/\bdocker containers?\b/gi, "docker"],
+  [/\bmaterial\s*ui\b|\bmui\b/gi, "material ui"],
+  [/\btailwind\s*css\b/gi, "tailwind css"],
+  [/\bhtml\b/gi, "html5"],
+  [/\bcss\b/gi, "css3"],
+  [/\bagile\s*\/\s*scrum\b|\bscrum\b/gi, "agile scrum"],
+  [/\bfrontend\b/gi, "frontend"],
+  [/\bfront end\b/gi, "frontend"],
+  [/\bbackend\b/gi, "backend"],
+  [/\bback end\b/gi, "backend"],
+  [/\bui\b/gi, "user interface"],
+  [/\bux\b/gi, "user experience"],
+  [/\bcomponent[-\s]+based architecture\b/gi, "component based architecture"],
+  [/\bresponsive ui\b/gi, "responsive design"],
+];
+
 const normalizeSearchText = (value: string) => {
-  return value.toLowerCase().replace(/\s+/g, " ").trim();
+  let normalized = value
+    .toLowerCase()
+    .replace(/[()_,;:|[\]{}]+/g, " ")
+    .replace(/[.&]/g, " ")
+    .replace(/\s*\/\s*/g, " / ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  for (const [pattern, replacement] of NORMALIZED_TERM_PATTERNS) {
+    normalized = normalized.replace(pattern, replacement);
+  }
+
+  return normalized.replace(/\s+/g, " ").trim();
 };
 
 const normalizeUniqueStrings = (values: string[]) => {
@@ -97,6 +140,12 @@ const normalizeUniqueStrings = (values: string[]) => {
   }
 
   return [...unique.values()];
+};
+
+const normalizeOptionalMinimumYears = (value: number | null | undefined) => {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : null;
 };
 
 export const parseAtsKeywordInput = (value: string | string[] | null | undefined) => {
@@ -195,14 +244,28 @@ const scoreAts = ({
   requiredMissing,
   preferredMatched,
   preferredMissing,
+  experienceRequirementMet,
+  educationRequirementMet,
+  certificationRequirementMet,
 }: Pick<
   AtsEvaluation,
-  "requiredMatched" | "requiredMissing" | "preferredMatched" | "preferredMissing"
+  | "requiredMatched"
+  | "requiredMissing"
+  | "preferredMatched"
+  | "preferredMissing"
+  | "experienceRequirementMet"
+  | "educationRequirementMet"
+  | "certificationRequirementMet"
 >) => {
   const requiredTotal = requiredMatched.length + requiredMissing.length;
   const preferredTotal = preferredMatched.length + preferredMissing.length;
+  const hardRequirementChecks = [
+    experienceRequirementMet,
+    educationRequirementMet,
+    certificationRequirementMet,
+  ].filter((value): value is boolean => value !== null);
 
-  if (requiredTotal === 0 && preferredTotal === 0) {
+  if (requiredTotal === 0 && preferredTotal === 0 && hardRequirementChecks.length === 0) {
     return null;
   }
 
@@ -215,6 +278,11 @@ const scoreAts = ({
 
   if (requiredTotal > 0) {
     return Math.round(requiredRatio * 100);
+  }
+
+  if (hardRequirementChecks.length > 0) {
+    const metChecks = hardRequirementChecks.filter(Boolean).length;
+    return Math.round((metChecks / hardRequirementChecks.length) * 100);
   }
 
   return Math.round(preferredRatio * 100);
@@ -353,6 +421,13 @@ const getDeterministicKeywordEvaluation = ({
       requiredMissing: required.missing,
       preferredMatched: preferred.matched,
       preferredMissing: preferred.missing,
+      experienceRequirementMet: minimumYearsExperience === null
+        ? null
+        : yearsOfExperience === null
+          ? false
+          : yearsOfExperience >= minimumYearsExperience,
+      educationRequirementMet: requiredEducation.length === 0 ? null : education.missing.length === 0,
+      certificationRequirementMet: requiredCertifications.length === 0 ? null : certifications.missing.length === 0,
     }),
   };
 };
@@ -510,7 +585,7 @@ const analyzeWithAI = async ({
                 requirements: job.requirements,
                 requiredKeywords,
                 preferredKeywords,
-                minimumYearsExperience: job.atsMinimumYearsExperience,
+                minimumYearsExperience: normalizeOptionalMinimumYears(job.atsMinimumYearsExperience),
                 requiredEducation: job.atsRequiredEducation,
                 requiredCertifications: job.atsRequiredCertifications,
               },
@@ -549,6 +624,9 @@ export const evaluateResumeAgainstJob = async ({
   >;
 }): Promise<AtsEvaluation> => {
   if (!job.atsEnabled) {
+    console.info("[ATS] Skipping evaluation because ATS is disabled for this job.", {
+      title: job.title,
+    });
     return buildNoConfigEvaluation();
   }
 
@@ -556,15 +634,28 @@ export const evaluateResumeAgainstJob = async ({
   const preferredKeywords = parseAtsKeywordInput(job.atsPreferredKeywords);
   const requiredEducation = parseAtsKeywordInput(job.atsRequiredEducation);
   const requiredCertifications = parseAtsKeywordInput(job.atsRequiredCertifications);
-  const minimumYearsExperience = typeof job.atsMinimumYearsExperience === "number"
-    ? job.atsMinimumYearsExperience
-    : null;
+  const minimumYearsExperience = normalizeOptionalMinimumYears(job.atsMinimumYearsExperience);
 
-  if (requiredKeywords.length === 0 && preferredKeywords.length === 0) {
+  if (!hasEffectiveAtsCriteria(job)) {
+    console.warn("[ATS] Skipping evaluation because the job has ATS enabled but no effective ATS criteria.", {
+      title: job.title,
+    });
     return buildNoConfigEvaluation();
   }
 
   try {
+    console.info("[ATS] Starting evaluation.", {
+      title: job.title,
+      requiredKeywordCount: requiredKeywords.length,
+      preferredKeywordCount: preferredKeywords.length,
+      requiredEducationCount: requiredEducation.length,
+      requiredCertificationCount: requiredCertifications.length,
+      minimumYearsExperience,
+      resumeBytes: resumeBuffer.byteLength,
+      hasOpenAiKey: Boolean(process.env.OPENAI_API_KEY),
+      model: process.env.ATS_OPENAI_MODEL || "gpt-4o-mini",
+    });
+
     const extractedText = await extractResumeText(resumeBuffer);
     const deterministicEvaluation = getDeterministicKeywordEvaluation({
       extractedText,
@@ -638,6 +729,7 @@ export const evaluateResumeAgainstJob = async ({
         };
       }
     } catch {
+      console.warn("[ATS] AI analysis failed; falling back to deterministic rules.");
       // Fall back to deterministic keyword scoring when AI analysis is unavailable.
     }
 
@@ -650,7 +742,8 @@ export const evaluateResumeAgainstJob = async ({
       requiredCertifications,
       summaryOverride: "Scored using rules-based keyword matching.",
     });
-  } catch {
+  } catch (error) {
+    console.error("[ATS] Evaluation failed during resume parsing or analysis.", error);
     return {
       ...buildRulesEvaluation({
         extractedText: "",

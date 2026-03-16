@@ -18,6 +18,9 @@ type AdminAccountEntity = {
   email: string;
   createdAt: number;
   createdBy: string;
+  isDeleted?: boolean;
+  deletedAt?: number;
+  deletedBy?: string;
 };
 
 type AdminBootstrapAttemptEntity = {
@@ -35,6 +38,9 @@ export type AdminAccount = {
   email: string;
   createdAt: string;
   createdBy: string;
+  isDeleted: boolean;
+  deletedAt: string | null;
+  deletedBy: string;
 };
 
 export type AdminAccountPage = {
@@ -53,6 +59,9 @@ const toAdminAccount = (entity: AdminAccountEntity): AdminAccount => ({
   email: entity.email,
   createdAt: new Date(entity.createdAt).toISOString(),
   createdBy: entity.createdBy,
+  isDeleted: Boolean(entity.isDeleted),
+  deletedAt: entity.deletedAt ? new Date(entity.deletedAt).toISOString() : null,
+  deletedBy: entity.deletedBy ?? "",
 });
 
 export const getAdminPermissionToken = () => {
@@ -101,14 +110,16 @@ const isAdminPermissionTokenCurrentlyValid = (providedToken: string) => {
 
 export const hasAnyAdminAccount = async () => {
   const tableClient = await getAppTableClient();
-  const pages = tableClient.listEntities<AdminAccountEntity>({
+  const entities = tableClient.listEntities<AdminAccountEntity>({
     queryOptions: {
       filter: `PartitionKey eq '${ADMIN_SCOPE}' and type eq '${ADMIN_ACCOUNT_TYPE}'`,
     },
-  }).byPage({ maxPageSize: 1 });
+  });
 
-  for await (const page of pages) {
-    return [...page].length > 0;
+  for await (const entity of entities) {
+    if (!entity.isDeleted) {
+      return true;
+    }
   }
 
   return false;
@@ -233,7 +244,8 @@ export const getAdminAccountByEmail = async (
       return null;
     }
 
-    return toAdminAccount(entity);
+    const record = toAdminAccount(entity);
+    return record.isDeleted ? null : record;
   } catch (error) {
     if (isTableNotFoundError(error)) {
       return null;
@@ -272,6 +284,9 @@ export const createAdminAccount = async (
     email: normalizedEmail,
     createdAt: now,
     createdBy: createdBy.trim().toLowerCase(),
+    isDeleted: false,
+    deletedAt: 0,
+    deletedBy: "",
   };
 
   await tableClient.upsertEntity(entity, "Replace");
@@ -314,6 +329,9 @@ export const updateAdminAccountEmail = async (
     email: nextNormalizedEmail,
     createdAt: Date.parse(existing.createdAt) || Date.now(),
     createdBy: updatedBy.trim().toLowerCase(),
+    isDeleted: false,
+    deletedAt: 0,
+    deletedBy: "",
   };
 
   await tableClient.upsertEntity(entity, "Replace");
@@ -322,7 +340,7 @@ export const updateAdminAccountEmail = async (
   return toAdminAccount(entity);
 };
 
-export const deleteAdminAccount = async (email: string) => {
+export const deleteAdminAccount = async (email: string, deletedBy: string) => {
   const normalizedEmail = normalizeEmail(email);
 
   if (!normalizedEmail) {
@@ -336,7 +354,17 @@ export const deleteAdminAccount = async (email: string) => {
   }
 
   const tableClient = await getAppTableClient();
-  await tableClient.deleteEntity(ADMIN_SCOPE, toRowKey(normalizedEmail));
+  await tableClient.upsertEntity<AdminAccountEntity>({
+    partitionKey: ADMIN_SCOPE,
+    rowKey: toRowKey(normalizedEmail),
+    type: ADMIN_ACCOUNT_TYPE,
+    email: existing.email,
+    createdAt: Date.parse(existing.createdAt),
+    createdBy: existing.createdBy,
+    isDeleted: true,
+    deletedAt: Date.now(),
+    deletedBy: normalizeEmail(deletedBy),
+  }, "Replace");
 };
 
 export const listAdminAccounts = async (): Promise<AdminAccount[]> => {
@@ -350,7 +378,11 @@ export const listAdminAccounts = async (): Promise<AdminAccount[]> => {
   const items: AdminAccount[] = [];
 
   for await (const entity of entities) {
-    items.push(toAdminAccount(entity));
+    const record = toAdminAccount(entity);
+
+    if (!record.isDeleted) {
+      items.push(record);
+    }
   }
 
   return items.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
@@ -373,6 +405,7 @@ export const listAdminAccountsPage = async (
   for await (const page of pages) {
     const items = [...page]
       .map((entity) => toAdminAccount(entity))
+      .filter((entity) => !entity.isDeleted)
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 
     return {
@@ -385,4 +418,27 @@ export const listAdminAccountsPage = async (
     items: [],
     pageInfo: buildPageInfo(limit),
   };
+};
+
+export const purgeDeletedAdminAccounts = async (olderThanMs: number) => {
+  const cutoff = Date.now() - olderThanMs;
+  const tableClient = await getAppTableClient();
+  const entities = tableClient.listEntities<AdminAccountEntity>({
+    queryOptions: {
+      filter: `PartitionKey eq '${ADMIN_SCOPE}' and type eq '${ADMIN_ACCOUNT_TYPE}'`,
+    },
+  });
+
+  let purgedCount = 0;
+
+  for await (const entity of entities) {
+    if (!entity.isDeleted || !entity.deletedAt || entity.deletedAt > cutoff) {
+      continue;
+    }
+
+    await tableClient.deleteEntity(ADMIN_SCOPE, entity.rowKey);
+    purgedCount += 1;
+  }
+
+  return purgedCount;
 };

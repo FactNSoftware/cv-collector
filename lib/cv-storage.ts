@@ -67,6 +67,9 @@ export type CvSubmissionRecord = {
   rejectionReason: string;
   reviewedAt: string | null;
   reviewedBy: string;
+  isDeleted: boolean;
+  deletedAt: string | null;
+  deletedBy: string;
   submittedAt: string;
 };
 
@@ -169,6 +172,9 @@ type CvSubmissionDocument = {
   rejectionReason?: string;
   reviewedAt?: number;
   reviewedBy?: string;
+  isDeleted?: boolean;
+  deletedAt?: number;
+  deletedBy?: string;
   submittedAt: number;
 };
 
@@ -297,6 +303,9 @@ const toRecord = (submission: CvSubmissionDocument): CvSubmissionRecord => {
       ? new Date(submission.reviewedAt).toISOString()
       : null,
     reviewedBy: submission.reviewedBy ?? "",
+    isDeleted: Boolean(submission.isDeleted),
+    deletedAt: submission.deletedAt ? new Date(submission.deletedAt).toISOString() : null,
+    deletedBy: submission.deletedBy ?? "",
     submittedAt: new Date(submission.submittedAt).toISOString(),
   };
 };
@@ -355,6 +364,9 @@ const toSubmissionDoc = (
     rejectionReason: String(data.rejectionReason ?? ""),
     reviewedAt: Number(data.reviewedAt ?? 0),
     reviewedBy: String(data.reviewedBy ?? ""),
+    isDeleted: Boolean(data.isDeleted),
+    deletedAt: Number(data.deletedAt ?? 0),
+    deletedBy: String(data.deletedBy ?? ""),
     submittedAt,
   };
 };
@@ -433,7 +445,7 @@ const getAtsEntityFields = (evaluation: AtsEvaluation) => ({
 });
 
 export const canSubmissionAtsBeRecalculated = (
-  submission: Pick<CvSubmissionRecord, "atsStatus" | "atsConfigSignature" | "atsScore">,
+  submission: Pick<CvSubmissionRecord, "reviewStatus" | "atsStatus" | "atsConfigSignature" | "atsScore">,
   job: Pick<
     JobRecord,
     | "atsEnabled"
@@ -453,9 +465,7 @@ export const canSubmissionAtsBeRecalculated = (
     return false;
   }
 
-  const currentSignature = getJobAtsConfigSignature(job);
-
-  if (!currentSignature) {
+  if (submission.reviewStatus !== "pending") {
     return false;
   }
 
@@ -463,17 +473,7 @@ export const canSubmissionAtsBeRecalculated = (
     return false;
   }
 
-  // Compatibility: older successful ATS records may not have persisted a config signature.
-  // Treat them as up to date unless they failed or are still unscored.
-  if (
-    submission.atsStatus === "success"
-    && submission.atsScore !== null
-    && !submission.atsConfigSignature
-  ) {
-    return false;
-  }
-
-  return submission.atsStatus === "failed";
+  return true;
 };
 
 const getMaxRejectedAttemptsForJob = async (jobId: string) => {
@@ -493,7 +493,11 @@ export const listCvSubmissions = async (): Promise<CvSubmissionRecord[]> => {
 
   for await (const entity of entities) {
     const rowKey = String(entity.rowKey ?? "");
-    resources.push(toRecord(toSubmissionDoc(rowKey, entity)));
+    const record = toRecord(toSubmissionDoc(rowKey, entity));
+
+    if (!record.isDeleted) {
+      resources.push(record);
+    }
   }
 
   return resources.sort((left, right) => (
@@ -583,6 +587,7 @@ export const listCvSubmissionsPage = async ({
   for await (const page of pages) {
     const items = [...page]
       .map((entity) => toRecord(toSubmissionDoc(String(entity.rowKey ?? ""), entity)))
+      .filter((entity) => !entity.isDeleted)
       .sort((left, right) => new Date(right.submittedAt).getTime() - new Date(left.submittedAt).getTime());
 
     return {
@@ -599,6 +604,7 @@ export const listCvSubmissionsPage = async ({
 
 export const getCvSubmissionById = async (
   id: string,
+  options?: { includeDeleted?: boolean },
 ): Promise<CvSubmissionRecord | null> => {
   if (!id) {
     return null;
@@ -617,7 +623,8 @@ export const getCvSubmissionById = async (
       return null;
     }
 
-    return toRecord(doc);
+    const record = toRecord(doc);
+    return record.isDeleted && !options?.includeDeleted ? null : record;
   } catch (error) {
     if (isTableNotFoundError(error)) {
       return null;
@@ -690,6 +697,9 @@ export const createCvSubmission = async (
         rejectionReason: "",
         reviewedAt: 0,
         reviewedBy: "",
+        isDeleted: false,
+        deletedAt: 0,
+        deletedBy: "",
         submittedAt,
       }],
     ]);
@@ -716,6 +726,9 @@ export const createCvSubmission = async (
       rejectionReason: "",
       reviewedAt: 0,
       reviewedBy: "",
+      isDeleted: false,
+      deletedAt: 0,
+      deletedBy: "",
       submittedAt,
     });
   } catch (error) {
@@ -808,6 +821,9 @@ export const updateCvSubmissionReview = async (
     rejectionReason: normalizedReason,
     reviewedAt,
     reviewedBy: input.reviewedBy.trim().toLowerCase(),
+    isDeleted: existing.isDeleted,
+    deletedAt: existing.deletedAt ? Date.parse(existing.deletedAt) : 0,
+    deletedBy: existing.deletedBy,
     submittedAt: Date.parse(existing.submittedAt),
   }, "Replace");
 
@@ -845,6 +861,9 @@ export const markCvSubmissionAtsQueued = async (id: string): Promise<CvSubmissio
     rejectionReason: existing.rejectionReason,
     reviewedAt: existing.reviewedAt ? Date.parse(existing.reviewedAt) : 0,
     reviewedBy: existing.reviewedBy,
+    isDeleted: existing.isDeleted,
+    deletedAt: existing.deletedAt ? Date.parse(existing.deletedAt) : 0,
+    deletedBy: existing.deletedBy,
     submittedAt: Date.parse(existing.submittedAt),
   }, "Replace");
 
@@ -884,6 +903,9 @@ export const markCvSubmissionAtsProcessing = async (id: string): Promise<CvSubmi
     rejectionReason: existing.rejectionReason,
     reviewedAt: existing.reviewedAt ? Date.parse(existing.reviewedAt) : 0,
     reviewedBy: existing.reviewedBy,
+    isDeleted: existing.isDeleted,
+    deletedAt: existing.deletedAt ? Date.parse(existing.deletedAt) : 0,
+    deletedBy: existing.deletedBy,
     submittedAt: Date.parse(existing.submittedAt),
   }, "Replace");
 
@@ -925,6 +947,9 @@ export const saveCvSubmissionAtsEvaluation = async (
     rejectionReason: existing.rejectionReason,
     reviewedAt: existing.reviewedAt ? Date.parse(existing.reviewedAt) : 0,
     reviewedBy: existing.reviewedBy,
+    isDeleted: existing.isDeleted,
+    deletedAt: existing.deletedAt ? Date.parse(existing.deletedAt) : 0,
+    deletedBy: existing.deletedBy,
     submittedAt: Date.parse(existing.submittedAt),
   }, "Replace");
 
@@ -968,6 +993,9 @@ export const markCvSubmissionAtsFailed = async (
     rejectionReason: existing.rejectionReason,
     reviewedAt: existing.reviewedAt ? Date.parse(existing.reviewedAt) : 0,
     reviewedBy: existing.reviewedBy,
+    isDeleted: existing.isDeleted,
+    deletedAt: existing.deletedAt ? Date.parse(existing.deletedAt) : 0,
+    deletedBy: existing.deletedBy,
     submittedAt: Date.parse(existing.submittedAt),
   }, "Replace");
 
@@ -1029,23 +1057,101 @@ export const updateCvSubmissionAts = async (
     rejectionReason: existing.rejectionReason,
     reviewedAt: existing.reviewedAt ? Date.parse(existing.reviewedAt) : 0,
     reviewedBy: existing.reviewedBy,
+    isDeleted: existing.isDeleted,
+    deletedAt: existing.deletedAt ? Date.parse(existing.deletedAt) : 0,
+    deletedBy: existing.deletedBy,
     submittedAt: Date.parse(existing.submittedAt),
   }, "Replace");
 
   return getCvSubmissionById(input.id);
 };
 
-export const deleteCvSubmission = async (id: string): Promise<boolean> => {
-  const existing = await getCvSubmissionById(id);
+export const deleteCvSubmission = async (id: string, deletedBy: string): Promise<boolean> => {
+  const existing = await getCvSubmissionById(id, { includeDeleted: true });
 
   if (!existing) {
     return false;
   }
 
   const tableClient = await getAppTableClient();
+  await tableClient.upsertEntity({
+    partitionKey: CV_SCOPE,
+    rowKey: toSubmissionRowKey(id),
+    type: CV_SUBMISSION_TYPE,
+    firstName: existing.firstName,
+    lastName: existing.lastName,
+    email: existing.email,
+    phone: existing.phone,
+    idOrPassportNumber: existing.idOrPassportNumber,
+    jobId: existing.jobId,
+    jobCode: existing.jobCode,
+    jobTitle: existing.jobTitle,
+    jobOpening: existing.jobOpening,
+    resumeOriginalName: existing.resumeOriginalName,
+    resumeStoredName: existing.resumeStoredName,
+    resumeMimeType: existing.resumeMimeType,
+    reviewStatus: existing.reviewStatus,
+    atsConfigSignature: existing.atsConfigSignature,
+    ...getAtsEntityFields({
+      score: existing.atsScore,
+      method: existing.atsMethod,
+      decisionBand: existing.atsDecisionBand,
+      summary: existing.atsSummary,
+      candidateSummary: existing.atsCandidateSummary,
+      confidenceNotes: existing.atsConfidenceNotes,
+      extractedTextPreview: existing.atsExtractedTextPreview,
+      normalizedSkills: existing.atsNormalizedSkills,
+      relevantRoles: existing.atsRelevantRoles,
+      education: existing.atsEducation,
+      certifications: existing.atsCertifications,
+      domains: existing.atsDomains,
+      seniority: existing.atsSeniority,
+      confidenceScore: existing.atsConfidenceScore,
+      yearsOfExperience: existing.atsYearsOfExperience,
+      experienceRequirementMet: existing.atsExperienceRequirementMet,
+      educationRequirementMet: existing.atsEducationRequirementMet,
+      certificationRequirementMet: existing.atsCertificationRequirementMet,
+      requiredMatched: existing.atsRequiredMatched,
+      requiredMissing: existing.atsRequiredMissing,
+      preferredMatched: existing.atsPreferredMatched,
+      preferredMissing: existing.atsPreferredMissing,
+      evaluatedAt: existing.atsEvaluatedAt,
+    }),
+    rejectionReason: existing.rejectionReason,
+    reviewedAt: existing.reviewedAt ? Date.parse(existing.reviewedAt) : 0,
+    reviewedBy: existing.reviewedBy,
+    isDeleted: true,
+    deletedAt: Date.now(),
+    deletedBy: deletedBy.trim().toLowerCase(),
+    submittedAt: Date.parse(existing.submittedAt),
+  }, "Replace");
 
-  await tableClient.deleteEntity(CV_SCOPE, toSubmissionRowKey(id));
-
-  await deleteCvUpload(existing.resumeStoredName);
   return true;
+};
+
+export const purgeDeletedCvSubmissions = async (olderThanMs: number) => {
+  const cutoff = Date.now() - olderThanMs;
+  const tableClient = await getAppTableClient();
+  const entities = tableClient.listEntities<Record<string, unknown>>({
+    queryOptions: {
+      filter: `PartitionKey eq '${CV_SCOPE}' and type eq '${CV_SUBMISSION_TYPE}'`,
+    },
+  });
+
+  let purgedCount = 0;
+
+  for await (const entity of entities) {
+    const rowKey = String(entity.rowKey ?? "");
+    const record = toRecord(toSubmissionDoc(rowKey, entity));
+
+    if (!record.isDeleted || !record.deletedAt || Date.parse(record.deletedAt) > cutoff) {
+      continue;
+    }
+
+    await tableClient.deleteEntity(CV_SCOPE, rowKey);
+    await deleteCvUpload(record.resumeStoredName);
+    purgedCount += 1;
+  }
+
+  return purgedCount;
 };

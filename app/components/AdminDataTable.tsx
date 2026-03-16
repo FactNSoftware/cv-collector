@@ -68,7 +68,10 @@ export function AdminDataTable<TData>({
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className="hover:bg-transparent">
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
+                  <TableHead
+                    key={header.id}
+                    className={header.column.id === "select" ? "w-[40px] px-2 sm:px-3" : undefined}
+                  >
                     {header.isPlaceholder
                       ? null
                       : flexRender(header.column.columnDef.header, header.getContext())}
@@ -98,20 +101,26 @@ export function AdminDataTable<TData>({
                     <TableCell
                       key={cell.id}
                       onClick={
-                        cell.column.id === "actions"
+                        cell.column.id === "actions" || cell.column.id === "select"
                           ? (event) => {
                               event.stopPropagation();
                             }
                           : undefined
                       }
                       onMouseDown={
-                        cell.column.id === "actions"
+                        cell.column.id === "actions" || cell.column.id === "select"
                           ? (event) => {
                               event.stopPropagation();
                             }
                           : undefined
                       }
-                      className={`${cell.column.id === "actions" ? "w-[84px] whitespace-nowrap text-right" : "align-top"} `}
+                      className={`${
+                        cell.column.id === "actions"
+                          ? "w-[84px] whitespace-nowrap text-right"
+                          : cell.column.id === "select"
+                            ? "w-[40px] px-2 py-4 align-top sm:px-3"
+                            : "align-top"
+                      } `}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>

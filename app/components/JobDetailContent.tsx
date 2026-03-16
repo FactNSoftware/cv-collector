@@ -96,7 +96,7 @@ export function JobDetailContent({
 
       {job.descriptionHtml && (
         <div
-          className="mt-10 space-y-4 text-base leading-8 text-slate-700 [&_blockquote]:border-l-4 [&_blockquote]:border-[var(--color-brand)] [&_blockquote]:pl-4 [&_blockquote]:italic [&_img]:my-6 [&_img]:rounded-3xl [&_img]:shadow-md [&_li]:ml-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-4 [&_ul]:list-disc [&_ul]:pl-5"
+          className="mt-10 space-y-4 text-base leading-8 text-slate-700 [&_blockquote]:border-l-4 [&_blockquote]:border-[var(--color-brand)] [&_blockquote]:pl-4 [&_blockquote]:italic [&_img]:my-6 [&_img]:block [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-3xl [&_img]:object-contain [&_img]:shadow-md [&_li]:ml-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-4 [&_ul]:list-disc [&_ul]:pl-5"
           dangerouslySetInnerHTML={{ __html: job.descriptionHtml }}
         />
       )}

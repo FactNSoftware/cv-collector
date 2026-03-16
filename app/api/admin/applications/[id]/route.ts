@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { enqueueAtsProcessing, triggerAtsQueueProcessing } from "../../../../../lib/ats-queue";
 import { recordAdminAuditEvent } from "../../../../../lib/audit-log";
 import { requireAdminApiSession } from "../../../../../lib/auth-guards";
+import { ensureApplicationChatForSubmission } from "../../../../../lib/acs-chat";
 import {
   getCvSubmissionById,
   deleteCvSubmission,
@@ -10,6 +11,7 @@ import {
   AtsRecalculationError,
   InvalidApplicationReviewTransitionError,
 } from "../../../../../lib/cv-storage";
+import { getJobById, hasEffectiveAtsCriteria } from "../../../../../lib/jobs";
 
 export const runtime = "nodejs";
 
@@ -67,9 +69,54 @@ export async function PATCH(
       },
     });
 
+    let chatProvisioningWarning: string | null = null;
+
+    if (body.reviewStatus === "accepted") {
+      try {
+        const chat = await ensureApplicationChatForSubmission(updated, auth.session.email);
+
+        await recordAdminAuditEvent({
+          actorEmail: auth.session.email,
+          action: "application.chat_provisioned",
+          targetType: "application",
+          targetId: updated.id,
+          summary: `Provisioned chat for accepted application ${updated.jobCode} for ${updated.email}`,
+          requestMethod: request.method,
+          requestPath: new URL(request.url).pathname,
+          userAgent: request.headers.get("user-agent") ?? "",
+          details: {
+            candidateEmail: updated.email,
+            jobCode: updated.jobCode,
+            chatThreadId: chat.chatThreadId,
+          },
+        });
+      } catch (chatError) {
+        const message = chatError instanceof Error ? chatError.message : "Unknown chat provisioning error.";
+
+        chatProvisioningWarning = "Application accepted, but chat could not be provisioned yet.";
+
+        await recordAdminAuditEvent({
+          actorEmail: auth.session.email,
+          action: "application.chat_provision_failed",
+          targetType: "application",
+          targetId: updated.id,
+          summary: `Chat provisioning failed for accepted application ${updated.jobCode} for ${updated.email}`,
+          requestMethod: request.method,
+          requestPath: new URL(request.url).pathname,
+          userAgent: request.headers.get("user-agent") ?? "",
+          details: {
+            candidateEmail: updated.email,
+            jobCode: updated.jobCode,
+            error: message,
+          },
+        });
+      }
+    }
+
     return NextResponse.json({
-      message: "Application updated successfully.",
+      message: chatProvisioningWarning || "Application updated successfully.",
       item: updated,
+      chatProvisioningWarning,
     });
   } catch (error) {
     if (error instanceof InvalidApplicationReviewTransitionError) {
@@ -103,6 +150,34 @@ export async function POST(
 
     if (!existing) {
       return NextResponse.json({ message: "Application not found." }, { status: 404 });
+    }
+
+    if (!existing.jobId) {
+      return NextResponse.json({ message: "This application is missing a job reference." }, { status: 400 });
+    }
+
+    const relatedJob = await getJobById(existing.jobId);
+
+    if (!relatedJob) {
+      return NextResponse.json({ message: "The related job could not be found." }, { status: 404 });
+    }
+
+    if (!relatedJob.atsEnabled) {
+      return NextResponse.json({ message: "ATS is not enabled for this job." }, { status: 400 });
+    }
+
+    if (existing.reviewStatus !== "pending") {
+      return NextResponse.json(
+        { message: "Only pending applications can be recalculated." },
+        { status: 400 },
+      );
+    }
+
+    if (!hasEffectiveAtsCriteria(relatedJob)) {
+      return NextResponse.json(
+        { message: "No ATS criteria are configured for this job. Add ATS rules before recalculating." },
+        { status: 400 },
+      );
     }
 
     await enqueueAtsProcessing({
@@ -171,7 +246,7 @@ export async function DELETE(
   try {
     const { id } = await context.params;
     const existing = await getCvSubmissionById(id);
-    const deleted = await deleteCvSubmission(id);
+    const deleted = await deleteCvSubmission(id, auth.session.email);
 
     if (!deleted) {
       return NextResponse.json({ message: "Application not found." }, { status: 404 });
@@ -183,8 +258,8 @@ export async function DELETE(
       targetType: "application",
       targetId: id,
       summary: existing
-        ? `Deleted application ${existing.jobCode} for ${existing.email}`
-        : `Deleted application ${id}`,
+        ? `Soft-deleted application ${existing.jobCode} for ${existing.email}`
+        : `Soft-deleted application ${id}`,
       requestMethod: request.method,
       requestPath: new URL(request.url).pathname,
       userAgent: request.headers.get("user-agent") ?? "",
