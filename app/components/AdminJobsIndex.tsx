@@ -322,7 +322,7 @@ export function AdminJobsIndex({
       primaryActionLabel="New Job"
     >
       <div className="space-y-4">
-        <div className="grid gap-3 rounded-[24px] border border-[#eadfcb] bg-white p-5 shadow-sm md:grid-cols-[1fr_220px]">
+        <div className="grid gap-3 rounded-[24px] border border-[var(--color-border-strong)] bg-white p-5 shadow-sm md:grid-cols-[1fr_220px]">
           <input
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}

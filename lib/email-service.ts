@@ -51,11 +51,15 @@ export const getEmailClient = () => {
 export const sendTransactionalEmail = async (
   recipientEmail: string,
   template: EmailTemplate,
+  options?: { senderAddress?: string; senderDisplayName?: string },
 ) => {
   const config = getAzureEmailConfig();
   const client = getEmailClient();
+  const from = options?.senderAddress?.trim() || (config.senderAddress as string);
+  const senderDisplayName = options?.senderDisplayName?.trim();
   const poller = await client.beginSend({
-    senderAddress: config.senderAddress as string,
+    senderAddress: from,
+    ...(senderDisplayName ? { senderDisplayName } : {}),
     recipients: {
       to: [{ address: recipientEmail }],
     },

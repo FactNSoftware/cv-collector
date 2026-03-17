@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Building2,
   ClipboardList,
   BriefcaseBusiness,
   House,
@@ -14,15 +15,16 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { LogoutButton } from "./LogoutButton";
 
 type PortalShellProps = {
-  portal: "admin" | "candidate";
+  portal: "admin" | "candidate" | "system" | "tenant";
   sessionEmail: string;
   title: string;
   eyebrow: string;
   subtitle?: string;
+  organizationSlug?: string;
   switchHref?: string;
   switchLabel?: string;
   secondaryActionHref?: string;
@@ -49,6 +51,15 @@ type ChatNavState = {
   unreadCount: number;
 };
 
+type TenantOrganizationOption = {
+  id: string;
+  slug: string;
+  name: string;
+  role: "owner" | "admin";
+  isRootOwner: boolean;
+  logoUrl?: string | null;
+};
+
 const ADMIN_NAV: NavItem[] = [
   { href: "/admin", label: "Dashboard", icon: House },
   { href: "/admin/jobs", label: "Jobs", icon: BriefcaseBusiness, matchPrefix: "/admin/jobs" },
@@ -64,12 +75,55 @@ const CANDIDATE_NAV: NavItem[] = [
   { href: "/account", label: "Profile", icon: UserRound, matchPrefix: "/account" },
 ];
 
-const isActivePath = (pathname: string, item: NavItem) => {
-  if (item.matchPrefix) {
-    return pathname === item.href || pathname.startsWith(item.matchPrefix);
+const SYSTEM_NAV: NavItem[] = [
+  { href: "/system", label: "Organizations", icon: Building2 },
+];
+
+const buildTenantNav = (slug: string): NavItem[] => [
+  { href: `/o/${slug}`, label: "Dashboard", icon: LayoutGrid },
+  { href: `/o/${slug}/jobs`, label: "Jobs", icon: BriefcaseBusiness, matchPrefix: `/o/${slug}/jobs` },
+  { href: `/o/${slug}/candidates`, label: "Candidates", icon: Users, matchPrefix: `/o/${slug}/candidates` },
+  { href: `/o/${slug}/settings`, label: "Settings", icon: Settings, matchPrefix: `/o/${slug}/settings` },
+];
+
+const normalizeTenantPath = (path: string, slug: string) => {
+  const base = `/o/${slug}`;
+
+  if (path === base) {
+    return "/";
   }
 
-  return pathname === item.href;
+  if (path.startsWith(`${base}/`)) {
+    return path.slice(base.length);
+  }
+
+  return path;
+};
+
+const isActivePath = (
+  pathname: string,
+  item: NavItem,
+  portal: "admin" | "candidate" | "system" | "tenant",
+  organizationSlug?: string,
+) => {
+  const normalizedPathname = portal === "tenant" && organizationSlug
+    ? normalizeTenantPath(pathname, organizationSlug)
+    : pathname;
+
+  const normalizedHref = portal === "tenant" && organizationSlug
+    ? normalizeTenantPath(item.href, organizationSlug)
+    : item.href;
+
+  const normalizedMatchPrefix = item.matchPrefix && portal === "tenant" && organizationSlug
+    ? normalizeTenantPath(item.matchPrefix, organizationSlug)
+    : item.matchPrefix;
+
+  if (item.matchPrefix) {
+    return normalizedPathname === normalizedHref
+      || Boolean(normalizedMatchPrefix && normalizedPathname.startsWith(normalizedMatchPrefix));
+  }
+
+  return normalizedPathname === normalizedHref;
 };
 
 const EMPTY_CHAT_NAV_STATE: ChatNavState = {
@@ -91,9 +145,29 @@ const readChatNavStateSnapshot = (storageKey: string): string => {
 
 const getBreadcrumbs = (
   pathname: string,
-  portal: "admin" | "candidate",
+  portal: "admin" | "candidate" | "system" | "tenant",
   title: string,
+  organizationSlug?: string,
 ): BreadcrumbItem[] => {
+  if (portal === "tenant" && organizationSlug) {
+    const base = `/o/${organizationSlug}`;
+    const tenantPath = normalizeTenantPath(pathname, organizationSlug);
+    if (tenantPath === "/") return [{ label: "Dashboard" }];
+    if (tenantPath === "/jobs") return [{ href: base, label: "Dashboard" }, { label: "Jobs" }];
+    if (tenantPath === "/candidates") return [{ href: base, label: "Dashboard" }, { label: "Candidates" }];
+    if (tenantPath === "/settings") return [{ href: base, label: "Dashboard" }, { label: "Settings" }];
+    if (tenantPath.startsWith("/jobs/")) return [{ href: base, label: "Dashboard" }, { href: `${base}/jobs`, label: "Jobs" }, { label: title }];
+    if (tenantPath.startsWith("/candidates/")) return [{ href: base, label: "Dashboard" }, { href: `${base}/candidates`, label: "Candidates" }, { label: title }];
+    return [{ href: base, label: "Dashboard" }, { label: title }];
+  }
+  if (portal === "system") {
+    if (pathname === "/system") {
+      return [{ label: "Organizations" }];
+    }
+
+    return [{ href: "/system", label: "Organizations" }, { label: title }];
+  }
+
   if (portal === "admin") {
     if (pathname === "/admin") {
       return [{ label: "Dashboard" }];
@@ -214,6 +288,7 @@ export function PortalShell({
   title,
   eyebrow,
   subtitle,
+  organizationSlug,
   switchHref,
   switchLabel,
   secondaryActionHref,
@@ -224,6 +299,8 @@ export function PortalShell({
 }: PortalShellProps) {
   const pathname = usePathname();
   const storageKey = `chat-nav-state:${portal}:${sessionEmail.trim().toLowerCase()}`;
+  const [tenantOrganizations, setTenantOrganizations] = useState<TenantOrganizationOption[]>([]);
+  const [isLoadingTenantOrganizations, setIsLoadingTenantOrganizations] = useState(false);
   const chatNavSnapshot = useSyncExternalStore(
     (onStoreChange) => {
       if (typeof window === "undefined") {
@@ -257,7 +334,16 @@ export function PortalShell({
       return EMPTY_CHAT_NAV_STATE;
     }
   }, [chatNavSnapshot]);
+  const tenantPortalMark = <Building2 className="h-6 w-6" />;
   const navItems = useMemo(() => {
+    if (portal === "system") {
+      return SYSTEM_NAV;
+    }
+
+    if (portal === "tenant") {
+      return organizationSlug ? buildTenantNav(organizationSlug) : SYSTEM_NAV;
+    }
+
     const chatItem: NavItem = {
       href: portal === "admin" ? "/admin/chat" : "/applications/chat",
       label: "Chat",
@@ -274,16 +360,81 @@ export function PortalShell({
     return chatNavState.hasChats
       ? [CANDIDATE_NAV[0], CANDIDATE_NAV[1], CANDIDATE_NAV[2], chatItem, CANDIDATE_NAV[3]]
       : CANDIDATE_NAV;
-  }, [chatNavState.hasChats, portal]);
-  const breadcrumbs = getBreadcrumbs(pathname, portal, title);
+  }, [chatNavState.hasChats, organizationSlug, portal]);
+  const tenantSwitcherItems = useMemo(() => {
+    if (portal !== "tenant") {
+      return [] as TenantOrganizationOption[];
+    }
+
+    const seenSlugs = new Set<string>();
+    const items: TenantOrganizationOption[] = [];
+
+    for (const option of tenantOrganizations) {
+      if (!option.slug || seenSlugs.has(option.slug)) {
+        continue;
+      }
+
+      seenSlugs.add(option.slug);
+      items.push(option);
+    }
+
+    if (organizationSlug && !seenSlugs.has(organizationSlug)) {
+      const cachedName =
+        (typeof window !== "undefined" &&
+          localStorage.getItem(`org-name:${organizationSlug}`)) ||
+        organizationSlug;
+      items.unshift({
+        id: organizationSlug,
+        slug: organizationSlug,
+        name: cachedName,
+        role: "admin",
+        isRootOwner: false,
+        logoUrl: null,
+      });
+    }
+
+    return items;
+  }, [organizationSlug, portal, tenantOrganizations]);
+
+  const handleTenantOrganizationChange = (nextSlug: string) => {
+    if (portal !== "tenant" || !nextSlug || !organizationSlug || nextSlug === organizationSlug) {
+      return;
+    }
+
+    const currentTenantPath = normalizeTenantPath(pathname, organizationSlug);
+    const normalizedTenantPath = currentTenantPath.startsWith("/")
+      ? currentTenantPath
+      : `/${currentTenantPath}`;
+
+    // Use a full browser navigation to avoid cross-origin CORS errors when middleware
+    // rewrites the path to a different subdomain (e.g. slug-a.host → slug-b.host).
+    const { protocol, hostname, host } = window.location;
+    if (hostname.startsWith(`${organizationSlug}.`)) {
+      // Subdomain routing: replace the current slug with the next slug.
+      const baseHostWithPort = host.slice(organizationSlug.length + 1);
+      window.location.href = `${protocol}//${nextSlug}.${baseHostWithPort}${normalizedTenantPath}`;
+    } else {
+      // Path-based routing (e.g. localhost without a slug subdomain).
+      const nextPath = normalizedTenantPath === "/"
+        ? `/o/${nextSlug}`
+        : `/o/${nextSlug}${normalizedTenantPath}`;
+      window.location.href = nextPath;
+    }
+  };
+  const breadcrumbs = getBreadcrumbs(pathname, portal, title, organizationSlug);
   const candidatePortalMark = (
     <div className="relative h-7 w-7">
       <BriefcaseBusiness className="absolute left-0 top-0 h-7 w-7" />
       <UserCircle2 className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-[var(--color-sidebar-accent)]" />
     </div>
   );
+  const systemPortalMark = <Building2 className="h-6 w-6" />; // keep for backward compat
 
   useEffect(() => {
+    if (portal === "system" || portal === "tenant") {
+      return;
+    }
+
     let cancelled = false;
 
     const loadChatSummary = async () => {
@@ -347,19 +498,68 @@ export function PortalShell({
       window.removeEventListener("focus", loadChatSummary);
       document.removeEventListener("visibilitychange", visibilityHandler);
     };
-  }, [pathname, storageKey]);
+  }, [pathname, portal, storageKey]);
+
+  useEffect(() => {
+    if (portal !== "tenant") {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadOrganizations = async () => {
+      setIsLoadingTenantOrganizations(true);
+
+      try {
+        const response = await fetch("/api/tenant/organizations", { cache: "no-store" });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = await response.json() as { items?: TenantOrganizationOption[] };
+
+        if (!cancelled && Array.isArray(payload.items)) {
+          for (const item of payload.items) {
+            if (item.slug && item.name) {
+              localStorage.setItem(`org-name:${item.slug}`, item.name);
+            }
+          }
+          setTenantOrganizations(payload.items);
+        }
+      } catch {
+        // Ignore organization switcher loading failures.
+      } finally {
+        if (!cancelled) {
+          setIsLoadingTenantOrganizations(false);
+        }
+      }
+    };
+
+    void loadOrganizations();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [portal, sessionEmail]);
 
   return (
     <div className="min-h-screen bg-[var(--color-canvas)] text-[var(--color-ink)]">
       <div className="flex min-h-screen w-full gap-3 px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 lg:px-5 xl:px-6">
-        <aside className="sticky top-3 z-30 hidden h-[calc(100vh-24px)] w-[74px] shrink-0 overflow-visible flex-col rounded-[26px] border border-[var(--color-border-strong)] bg-[linear-gradient(180deg,rgba(245,249,243,0.96),rgba(231,240,231,0.96))] p-2.5 shadow-[var(--shadow-soft)] lg:flex sm:top-4 sm:h-[calc(100vh-32px)]">
+        <aside className="sticky top-3 z-30 hidden h-[calc(100vh-24px)] w-[74px] shrink-0 overflow-visible flex-col rounded-[26px] border border-[var(--color-border-strong)] bg-[linear-gradient(180deg,var(--color-panel),var(--color-panel-strong))] p-2.5 shadow-[var(--shadow-soft)] lg:flex sm:top-4 sm:h-[calc(100vh-32px)]">
           <div className="mb-5 flex h-12 items-center justify-center rounded-[18px] bg-[var(--color-sidebar-accent)] text-[var(--color-sidebar-accent-ink)]">
-            {portal === "admin" ? <ShieldCheck className="h-6 w-6" /> : candidatePortalMark}
+            {portal === "candidate"
+              ? candidatePortalMark
+              : portal === "admin"
+                ? <ShieldCheck className="h-6 w-6" />
+                : portal === "tenant"
+                  ? tenantPortalMark
+                  : systemPortalMark}
           </div>
           <nav className="flex flex-1 flex-col gap-2.5 overflow-visible">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const active = isActivePath(pathname, item);
+              const active = isActivePath(pathname, item, portal, organizationSlug);
 
               return (
                 <Link
@@ -393,7 +593,11 @@ export function PortalShell({
               aria-label={switchLabel}
               className="group relative z-0 mt-2.5 flex h-11 items-center justify-center rounded-[18px] border border-[var(--color-border)] bg-white text-[var(--color-muted)] transition hover:z-20 hover:border-[var(--color-sidebar-accent)] hover:text-[var(--color-ink)] focus-visible:z-20"
             >
-              {portal === "admin" ? <LayoutGrid className="h-5 w-5" /> : <ShieldCheck className="h-5 w-5" />}
+              {portal === "admin"
+                ? <LayoutGrid className="h-5 w-5" />
+                : portal === "candidate"
+                  ? <ShieldCheck className="h-5 w-5" />
+                  : <House className="h-5 w-5" />}
               <span className="pointer-events-none absolute left-[calc(100%+10px)] top-1/2 z-30 hidden -translate-y-1/2 whitespace-nowrap rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-panel)] px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] opacity-0 shadow-[var(--shadow-soft)] transition group-hover:opacity-100 xl:block">
                 {switchLabel}
               </span>
@@ -407,10 +611,22 @@ export function PortalShell({
               <div>
                 <div className="mb-3 flex items-center gap-3 lg:hidden">
                   <div className="flex h-11 w-11 items-center justify-center rounded-[18px] bg-[var(--color-sidebar-accent)] text-[var(--color-sidebar-accent-ink)] shadow-[var(--shadow-soft)]">
-                    {portal === "admin" ? <ShieldCheck className="h-5 w-5" /> : candidatePortalMark}
+                    {portal === "candidate"
+                      ? candidatePortalMark
+                      : portal === "admin"
+                        ? <ShieldCheck className="h-5 w-5" />
+                        : portal === "tenant"
+                          ? tenantPortalMark
+                          : systemPortalMark}
                   </div>
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--color-muted)]">
-                    {portal === "admin" ? "Admin Portal" : "Candidate Portal"}
+                    {portal === "admin"
+                      ? "Admin Portal"
+                      : portal === "candidate"
+                        ? "Candidate Portal"
+                        : portal === "tenant"
+                          ? "Organization Portal"
+                          : "System Portal"}
                   </p>
                 </div>
                 {breadcrumbs.length > 0 && (
@@ -446,7 +662,35 @@ export function PortalShell({
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-end gap-2">
+                {portal === "tenant" && organizationSlug && (
+                  <div className="w-full sm:w-[280px]">
+                    <label
+                      htmlFor="tenant-organization-switcher"
+                      className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]"
+                    >
+                      Organization
+                    </label>
+                    <select
+                      id="tenant-organization-switcher"
+                      value={organizationSlug}
+                      onChange={(event) => handleTenantOrganizationChange(event.target.value)}
+                      disabled={isLoadingTenantOrganizations || tenantSwitcherItems.length <= 1}
+                      className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-white px-3 text-sm text-[var(--color-ink)] outline-none transition focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[var(--color-focus-ring)] disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {tenantSwitcherItems.map((item) => (
+                        <option key={item.slug} value={item.slug}>
+                          {item.name}
+                          {item.isRootOwner
+                            ? " (Root owner)"
+                            : item.role === "owner"
+                              ? " (Owner)"
+                              : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 {switchHref && switchLabel && (
                   <Link
                     href={switchHref}
@@ -481,11 +725,11 @@ export function PortalShell({
         </div>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--color-border-strong)] bg-[rgba(252,253,249,0.96)] px-3 py-3 backdrop-blur lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--color-border-strong)] bg-[var(--color-panel)] px-3 py-3 backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-screen-sm items-center justify-between gap-2 rounded-[24px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-2 shadow-[var(--shadow-soft)]">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active = isActivePath(pathname, item);
+            const active = isActivePath(pathname, item, portal, organizationSlug);
 
             return (
               <Link

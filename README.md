@@ -54,6 +54,16 @@ If `OPENAI_API_KEY` is configured, CV submissions use AI-assisted ATS extraction
 
 `APP_BASE_URL` is used in transactional links sent by email, including admin invite/login emails. If it is not set, the app falls back to `https://recruitment.factnsoftware.com`.
 
+### Local MT Dev Environment
+
+Use a separate local env file for the multi-tenant dev stack so local runs do not reuse the default `.env.local` credentials.
+
+```bash
+npm run dev:mt-dev
+```
+
+This starts Next.js with `.env.mt-dev.local` loaded first.
+
 ## Authentication And Session Flow
 
 The app uses email OTP authentication with server-side sessions.

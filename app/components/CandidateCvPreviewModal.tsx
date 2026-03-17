@@ -57,7 +57,7 @@ export function CandidateCvPreviewModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(5,20,10,0.48)] px-4 py-6">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-dialog-overlay)] px-4 py-6">
       <div
         role="dialog"
         aria-modal="true"

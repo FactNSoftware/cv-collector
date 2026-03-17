@@ -23,6 +23,8 @@ type JobEditorFormProps = {
   sessionEmail: string;
   mode: "create" | "edit";
   initialJob?: JobRecord | null;
+  portal?: "admin" | "tenant";
+  organizationSlug?: string;
 };
 
 type JobFormState = JobPreviewDraft;
@@ -85,10 +87,15 @@ export function JobEditorForm({
   sessionEmail,
   mode,
   initialJob,
+  portal = "admin",
+  organizationSlug,
 }: JobEditorFormProps) {
+  const isTenant = portal === "tenant" && !!organizationSlug;
+  const jobsBasePath = isTenant ? `/o/${organizationSlug}/jobs` : "/admin/jobs";
+  const apiBasePath = isTenant ? `/api/tenant/${organizationSlug}/jobs` : "/api/admin/jobs";
   const cancelHref = mode === "edit" && initialJob
-    ? `/admin/jobs/${initialJob.id}/candidates`
-    : "/admin/jobs";
+    ? (isTenant ? jobsBasePath : `/admin/jobs/${initialJob.id}/candidates`)
+    : jobsBasePath;
   const previewHref = mode === "edit" && initialJob
     ? `/admin/jobs/${initialJob.id}/preview`
     : null;
@@ -108,7 +115,7 @@ export function JobEditorForm({
   const saveJob = async () => {
     try {
       const response = await fetch(
-        mode === "edit" && initialJob ? `/api/admin/jobs/${initialJob.id}` : "/api/admin/jobs",
+        mode === "edit" && initialJob ? `${apiBasePath}/${initialJob.id}` : apiBasePath,
         {
           method: mode === "edit" ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
@@ -175,13 +182,15 @@ export function JobEditorForm({
       }
       showToast("Job saved successfully.");
       if (submitMode === "exit") {
-        window.location.href = mode === "edit"
-          ? `/admin/jobs/${savedJob.id}/candidates`
-          : "/admin/jobs";
+        window.location.href = isTenant
+          ? jobsBasePath
+          : (mode === "edit" ? `/admin/jobs/${savedJob.id}/candidates` : "/admin/jobs");
         return;
       }
 
-      window.location.href = `/admin/jobs/${savedJob.id}/edit`;
+      window.location.href = isTenant
+        ? `${jobsBasePath}/${savedJob.id}/edit`
+        : `/admin/jobs/${savedJob.id}/edit`;
       return;
     }
 
@@ -228,13 +237,14 @@ export function JobEditorForm({
 
   return (
     <PortalShell
-      portal="admin"
+      portal={portal}
+      organizationSlug={organizationSlug}
       sessionEmail={sessionEmail}
       eyebrow={mode === "edit" && initialJob ? initialJob.code : "New Job"}
       title={mode === "edit" ? `Edit ${initialJob?.title ?? "job"}` : "Create a new job"}
       subtitle="Structured role details, rich description content, and publishing controls."
-      primaryActionHref={initialJob ? `/admin/jobs/${initialJob.id}/candidates` : "/admin/jobs"}
-      primaryActionLabel={initialJob ? "View Applicants" : "Back to Jobs"}
+      primaryActionHref={isTenant ? jobsBasePath : (initialJob ? `/admin/jobs/${initialJob.id}/candidates` : "/admin/jobs")}
+      primaryActionLabel={initialJob ? (isTenant ? "Back to Jobs" : "View Applicants") : "Back to Jobs"}
     >
       <section className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-6 shadow-[var(--shadow-soft)]">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
@@ -243,7 +253,7 @@ export function JobEditorForm({
                 Job code is auto-generated on first save. Use structured details so candidates can understand the role before applying.
               </p>
             </div>
-            <div className="rounded-2xl bg-[#f5f7ef] px-4 py-3 text-sm text-slate-700">
+            <div className="rounded-2xl bg-[var(--color-panel-strong)] px-4 py-3 text-sm text-slate-700">
               {initialJob
                 ? `Last updated ${new Date(initialJob.updatedAt).toLocaleString()}`
                 : "Ready to create a new job record."}
@@ -496,7 +506,7 @@ export function JobEditorForm({
                   <BriefcaseBusiness className="mr-1.5 h-4 w-4" />
                   Structured job schema
                 </span>
-                <span className="inline-flex items-center rounded-full bg-[#edf4ff] px-3 py-1.5 font-medium text-[#0c5db3]">
+                <span className="inline-flex items-center rounded-full bg-[var(--color-panel-strong)] px-3 py-1.5 font-medium text-[var(--color-brand-strong)]">
                   <MapPin className="mr-1.5 h-4 w-4" />
                   Candidate-friendly job details
                 </span>

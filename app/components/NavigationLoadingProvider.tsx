@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type CSSProperties,
   createContext,
   type ReactNode,
   startTransition,
@@ -20,6 +21,48 @@ type NavigationLoadingContextValue = {
 };
 
 const NavigationLoadingContext = createContext<NavigationLoadingContextValue | null>(null);
+
+const OVERLAY_THEME_VARIABLES = [
+  "--color-overlay",
+  "--color-border-strong",
+  "--shadow-soft",
+  "--color-sidebar-accent",
+  "--color-sidebar-accent-ink",
+  "--color-ink",
+  "--color-muted",
+  "--color-panel",
+] as const;
+
+type OverlayThemeStyle = CSSProperties & Record<(typeof OVERLAY_THEME_VARIABLES)[number], string>;
+
+const collectOverlayThemeStyle = (): OverlayThemeStyle | undefined => {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  const scope = document.querySelector<HTMLElement>("[data-tenant-theme]");
+
+  if (!scope) {
+    return undefined;
+  }
+
+  const computed = window.getComputedStyle(scope);
+  const style = {} as OverlayThemeStyle;
+  let hasValue = false;
+
+  for (const variableName of OVERLAY_THEME_VARIABLES) {
+    const variableValue = computed.getPropertyValue(variableName).trim();
+
+    if (!variableValue) {
+      continue;
+    }
+
+    style[variableName] = variableValue;
+    hasValue = true;
+  }
+
+  return hasValue ? style : undefined;
+};
 
 export function useNavigationLoading() {
   const value = useContext(NavigationLoadingContext);
@@ -46,7 +89,14 @@ export function NavigationLoadingProvider({
     title: "Loading",
     message: "Preparing the next screen.",
   });
+  const [overlayThemeStyle, setOverlayThemeStyle] = useState<OverlayThemeStyle | undefined>(
+    undefined,
+  );
   const timeoutRef = useRef<number | null>(null);
+
+  const syncOverlayThemeStyle = useCallback(() => {
+    setOverlayThemeStyle(collectOverlayThemeStyle());
+  }, []);
 
   const hideLoading = useCallback(() => {
     if (timeoutRef.current) {
@@ -65,6 +115,8 @@ export function NavigationLoadingProvider({
       window.clearTimeout(timeoutRef.current);
     }
 
+    syncOverlayThemeStyle();
+
     setLoadingState({
       visible: true,
       title,
@@ -75,7 +127,7 @@ export function NavigationLoadingProvider({
       setLoadingState((current) => ({ ...current, visible: false }));
       timeoutRef.current = null;
     }, 15000);
-  }, []);
+  }, [syncOverlayThemeStyle]);
 
   useEffect(() => {
     startTransition(() => {
@@ -149,6 +201,7 @@ export function NavigationLoadingProvider({
         <LoadingOverlay
           title={loadingState.title}
           message={loadingState.message}
+          themeVars={overlayThemeStyle}
         />
       )}
     </NavigationLoadingContext.Provider>

@@ -4,6 +4,7 @@ import {
   readSessionTokenFromRequest,
   SESSION_COOKIE_NAME,
 } from "../../../../lib/auth-session";
+import { getSessionCookieDomain } from "../../../../lib/app-url";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,7 @@ export async function POST(request: Request) {
 
     const response = NextResponse.json({ message: "Logged out successfully." });
 
+    const cookieDomain = getSessionCookieDomain();
     response.cookies.set({
       name: SESSION_COOKIE_NAME,
       value: "",
@@ -22,6 +24,7 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 0,
+      ...(cookieDomain ? { domain: cookieDomain } : {}),
     });
 
     return response;

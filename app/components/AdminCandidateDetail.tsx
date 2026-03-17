@@ -196,7 +196,7 @@ export function AdminCandidateDetail({
       primaryActionLabel="Back to Candidates"
     >
       <div className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
-          <section className="rounded-[28px] border border-[#eadfcb] bg-white p-6 shadow-sm">
+          <section className="rounded-[28px] border border-[var(--color-border-strong)] bg-white p-6 shadow-sm">
             <h2 className="text-xl font-semibold text-slate-900">Profile</h2>
             <div className="mt-5 grid gap-4">
               <div className="rounded-2xl bg-slate-50 p-4">
@@ -226,7 +226,7 @@ export function AdminCandidateDetail({
             </div>
           </section>
 
-          <section className="rounded-[28px] border border-[#eadfcb] bg-white p-6 shadow-sm">
+          <section className="rounded-[28px] border border-[var(--color-border-strong)] bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">Application History</h2>

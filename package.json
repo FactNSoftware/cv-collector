@@ -4,8 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:mt-dev": "bash -lc 'set -a && source .env.mt-dev.local && set +a && exec ./node_modules/.bin/next dev'",
     "build": "next build --webpack",
+    "build:mt-dev": "bash -lc 'set -a && source .env.mt-dev.local && set +a && exec ./node_modules/.bin/next build --webpack'",
     "start": "next start",
+    "start:mt-dev": "bash -lc 'set -a && source .env.mt-dev.local && set +a && exec ./node_modules/.bin/next start'",
     "lint": "eslint",
     "cleanup:soft-deleted": "tsx scripts/run-soft-delete-cleanup.ts"
   },

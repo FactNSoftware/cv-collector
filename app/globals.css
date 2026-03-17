@@ -2,7 +2,7 @@
 
 :root {
   --color-canvas: #eef4ee;
-  --color-panel: rgba(252, 253, 249, 0.94);
+  --color-panel: #fcfdf9;
   --color-panel-strong: #e5efe5;
   --color-sidebar-accent: #003d18;
   --color-sidebar-accent-ink: #a5eb2e;
@@ -12,6 +12,16 @@
   --color-brand-strong: #0f4f21;
   --color-border: #d4ded4;
   --color-border-strong: #b8c9b8;
+  --color-bg-radial-a: rgba(165, 235, 46, 0.16);
+  --color-bg-radial-b: rgba(0, 61, 24, 0.08);
+  --color-bg-linear-start: #f8fbf6;
+  --color-bg-linear-end: #edf4ee;
+  --color-selection: rgba(165, 235, 46, 0.24);
+  --color-focus-ring: rgba(165, 235, 46, 0.18);
+  --color-link: #0f4f21;
+  --color-link-hover: #003d18;
+  --color-overlay: rgba(0, 61, 24, 0.14);
+  --color-dialog-overlay: rgba(5, 20, 10, 0.48);
   --shadow-soft: 0 24px 60px rgba(7, 36, 18, 0.08);
 }
 
@@ -27,9 +37,9 @@
 
 html {
   background:
-    radial-gradient(circle at top left, rgba(165, 235, 46, 0.16), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(0, 61, 24, 0.08), transparent 32%),
-    linear-gradient(180deg, #f8fbf6 0%, #edf4ee 100%);
+    radial-gradient(circle at top left, var(--color-bg-radial-a), transparent 28%),
+    radial-gradient(circle at bottom right, var(--color-bg-radial-b), transparent 32%),
+    linear-gradient(180deg, var(--color-bg-linear-start) 0%, var(--color-bg-linear-end) 100%);
   font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
 }
 
@@ -64,7 +74,7 @@ button:disabled,
 }
 
 ::selection {
-  background: rgba(165, 235, 46, 0.24);
+  background: var(--color-selection);
 }
 
 a {
@@ -90,7 +100,7 @@ a {
 
 .theme-btn-primary:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 4px rgba(165, 235, 46, 0.18);
+  box-shadow: 0 0 0 4px var(--color-focus-ring);
 }
 
 .theme-badge-brand {
@@ -130,4 +140,33 @@ a {
   border: 1px solid #fda4af;
   background: #fff;
   color: #be123c;
+}
+
+/* Keep legacy slate utility usage aligned with tenant theme tokens. */
+.text-slate-900,
+.text-slate-800 {
+  color: var(--color-ink) !important;
+}
+
+.text-slate-700 {
+  color: var(--color-brand-strong) !important;
+}
+
+.text-slate-600,
+.text-slate-500 {
+  color: var(--color-muted) !important;
+}
+
+.bg-slate-50,
+.bg-slate-100 {
+  background-color: var(--color-panel-strong) !important;
+}
+
+.bg-slate-200 {
+  background-color: var(--color-border-strong) !important;
+}
+
+.border-slate-300,
+.border-slate-200 {
+  border-color: var(--color-border) !important;
 }

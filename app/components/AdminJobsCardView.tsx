@@ -31,7 +31,7 @@ export function AdminJobsCardView({
   return (
     <div className="space-y-4">
       {items.map((job) => (
-        <article key={job.id} className="rounded-[28px] border border-[#eadfcb] bg-white p-6 shadow-sm">
+        <article key={job.id} className="rounded-[28px] border border-[var(--color-border-strong)] bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="max-w-3xl">
               <div className="flex flex-wrap items-center gap-2">
@@ -41,18 +41,18 @@ export function AdminJobsCardView({
                 <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${job.isPublished ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
                   {job.isPublished ? "Published" : "Draft"}
                 </span>
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                <span className="rounded-full bg-[var(--color-panel-strong)] px-2.5 py-1 text-xs font-semibold text-[var(--color-brand-strong)]">
                   {job.applicantCount} applicant{job.applicantCount === 1 ? "" : "s"}
                 </span>
               </div>
-              <h2 className="mt-3 text-2xl font-semibold text-slate-900">{job.title}</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{job.summary}</p>
-              <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium text-slate-700">
-                <span className="rounded-full bg-slate-100 px-2.5 py-1">{job.employmentType}</span>
-                <span className="rounded-full bg-slate-100 px-2.5 py-1">{job.workplaceType}</span>
-                <span className="rounded-full bg-slate-100 px-2.5 py-1">{job.experienceLevel}</span>
-                {job.location && <span className="rounded-full bg-slate-100 px-2.5 py-1">{job.location}</span>}
-                {job.department && <span className="rounded-full bg-slate-100 px-2.5 py-1">{job.department}</span>}
+              <h2 className="mt-3 text-2xl font-semibold text-[var(--color-ink)]">{job.title}</h2>
+              <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">{job.summary}</p>
+              <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium text-[var(--color-brand-strong)]">
+                <span className="rounded-full bg-[var(--color-panel-strong)] px-2.5 py-1">{job.employmentType}</span>
+                <span className="rounded-full bg-[var(--color-panel-strong)] px-2.5 py-1">{job.workplaceType}</span>
+                <span className="rounded-full bg-[var(--color-panel-strong)] px-2.5 py-1">{job.experienceLevel}</span>
+                {job.location && <span className="rounded-full bg-[var(--color-panel-strong)] px-2.5 py-1">{job.location}</span>}
+                {job.department && <span className="rounded-full bg-[var(--color-panel-strong)] px-2.5 py-1">{job.department}</span>}
               </div>
             </div>
             <div className="flex flex-wrap gap-2">

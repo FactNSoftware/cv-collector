@@ -127,7 +127,7 @@ export function AtsDetailsModal({
     || submission.atsStatus === "failed";
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-[rgba(5,20,10,0.48)] px-3 py-4 sm:px-4 sm:py-6">
+    <div className="fixed inset-0 z-50 overflow-hidden bg-[var(--color-dialog-overlay)] px-3 py-4 sm:px-4 sm:py-6">
       <div
         role="dialog"
         aria-modal="true"

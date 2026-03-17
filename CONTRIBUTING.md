@@ -22,6 +22,12 @@ cp .env.example .env.local
 npm run dev
 ```
 
+For the multi-tenant dev stack:
+
+```bash
+npm run dev:mt-dev
+```
+
 ## Before Opening a Pull Request
 
 Run:

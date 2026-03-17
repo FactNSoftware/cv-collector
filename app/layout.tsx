@@ -1,10 +1,17 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { getAppBaseUrl } from "../lib/app-url";
+import {
+  resolveTenantBrandingFromHost,
+  toTenantCssVariables,
+} from "../lib/organization-branding";
 import "./globals.css";
 import { NavigationLoadingProvider } from "./components/NavigationLoadingProvider";
 import { ToastProvider } from "./components/ToastProvider";
 
 const appBaseUrl = getAppBaseUrl();
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   metadataBase: new URL(appBaseUrl),
@@ -39,14 +46,22 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  const tenantBranding = await resolveTenantBrandingFromHost(host);
+
   return (
     <html lang="en">
-      <body>
+      <body
+        style={toTenantCssVariables(tenantBranding.theme)}
+        data-tenant-host={tenantBranding.host ?? ""}
+        data-tenant-slug={tenantBranding.organization?.slug ?? ""}
+      >
         <ToastProvider>
           <NavigationLoadingProvider>{children}</NavigationLoadingProvider>
         </ToastProvider>

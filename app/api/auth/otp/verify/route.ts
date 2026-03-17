@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAuthSession, SESSION_COOKIE_NAME } from "../../../../../lib/auth-session";
+import { getSessionCookieDomain } from "../../../../../lib/app-url";
 import { OtpValidationError, verifyLoginOtp } from "../../../../../lib/auth-otp";
 import { ensureCandidateProfile } from "../../../../../lib/candidate-profile";
 import { getPostAuthRedirectPath } from "../../../../../lib/auth-guards";
@@ -29,6 +30,7 @@ export async function POST(request: Request) {
       redirectPath,
     });
 
+    const cookieDomain = getSessionCookieDomain();
     response.cookies.set({
       name: SESSION_COOKIE_NAME,
       value: session.token,
@@ -37,6 +39,7 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === "production",
       path: "/",
       expires: session.expiresAt,
+      ...(cookieDomain ? { domain: cookieDomain } : {}),
     });
 
     return response;

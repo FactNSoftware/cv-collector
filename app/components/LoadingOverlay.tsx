@@ -1,11 +1,14 @@
 "use client";
 
+import type { CSSProperties } from "react";
+
 type LoadingOverlayProps = {
   title: string;
   message?: string;
   fixed?: boolean;
   containerClassName?: string;
   panelClassName?: string;
+  themeVars?: CSSProperties;
 };
 
 export function LoadingOverlay({
@@ -14,14 +17,18 @@ export function LoadingOverlay({
   fixed = true,
   containerClassName = "",
   panelClassName = "",
+  themeVars,
 }: LoadingOverlayProps) {
   const containerClasses = fixed
-    ? "fixed inset-0 z-50 flex items-center justify-center bg-[rgba(232,239,232,0.14)] backdrop-blur-[3px]"
-    : "absolute inset-0 z-10 flex items-center justify-center bg-[rgba(232,239,232,0.14)] backdrop-blur-[3px]";
+    ? "fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-overlay)] backdrop-blur-[3px]"
+    : "absolute inset-0 z-10 flex items-center justify-center bg-[var(--color-overlay)] backdrop-blur-[3px]";
 
   return (
-    <div className={`${containerClasses} ${containerClassName}`.trim()}>
-      <div className={`w-[min(92vw,22rem)] rounded-[22px] border border-[var(--color-border-strong)] bg-white/88 px-4 py-4 text-center shadow-[var(--shadow-soft)] sm:rounded-[24px] sm:px-6 sm:py-5 ${panelClassName}`.trim()}>
+    <div
+      className={`${containerClasses} ${containerClassName}`.trim()}
+      style={themeVars}
+    >
+      <div className={`w-[min(92vw,22rem)] rounded-[22px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] px-4 py-4 text-center shadow-[var(--shadow-soft)] sm:rounded-[24px] sm:px-6 sm:py-5 ${panelClassName}`.trim()}>
         <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-2xl bg-[var(--color-sidebar-accent)] text-[var(--color-sidebar-accent-ink)] sm:h-10 sm:w-10">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent sm:h-5 sm:w-5" />
         </div>
