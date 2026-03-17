@@ -1,6 +1,6 @@
 import { createHash, randomInt } from "crypto";
-import { EmailClient } from "@azure/communication-email";
 import { getAppTableClient, isTableNotFoundError } from "./azure-tables";
+import { sendTransactionalEmail } from "./email-service";
 import { buildOtpEmailTemplate } from "./otp-email-template";
 
 const AUTH_SECRET_ENV = "AUTH_SECRET";
@@ -10,8 +10,6 @@ const OTP_LENGTH = 6;
 const OTP_TTL_MS = 5 * 60 * 1000;
 const OTP_EXPIRY_MINUTES = OTP_TTL_MS / (60 * 1000);
 const OTP_MAX_ATTEMPTS = 5;
-
-let emailClientCache: EmailClient | null = null;
 
 export class OtpValidationError extends Error {
   constructor(message: string) {
@@ -58,70 +56,13 @@ const createOtpCode = () => {
   return randomInt(0, 10 ** OTP_LENGTH).toString().padStart(OTP_LENGTH, "0");
 };
 
-const getAzureEmailConfig = () => {
-  const connectionString = process.env.AZURE_COMMUNICATION_CONNECTION_STRING;
-  const senderAddress = process.env.AZURE_EMAIL_SENDER_ADDRESS;
-
-  const missing: string[] = [];
-
-  if (!connectionString) {
-    missing.push("AZURE_COMMUNICATION_CONNECTION_STRING");
-  }
-
-  if (!senderAddress) {
-    missing.push("AZURE_EMAIL_SENDER_ADDRESS");
-  }
-
-  if (missing.length > 0) {
-    throw new Error(
-      `Azure Email configuration is missing. Set: ${missing.join(", ")}`,
-    );
-  }
-
-  return {
-    connectionString,
-    senderAddress,
-  };
-};
-
-const getEmailClient = () => {
-  if (emailClientCache) {
-    return emailClientCache;
-  }
-
-  const config = getAzureEmailConfig();
-  emailClientCache = new EmailClient(config.connectionString as string);
-
-  return emailClientCache;
-};
-
 const sendOtpEmail = async (email: string, otpCode: string) => {
-  const config = getAzureEmailConfig();
   const template = buildOtpEmailTemplate({
     otpCode,
     recipientEmail: email,
     expiresInMinutes: OTP_EXPIRY_MINUTES,
   });
-
-  const client = getEmailClient();
-  const poller = await client.beginSend({
-    senderAddress: config.senderAddress as string,
-    recipients: {
-      to: [{ address: email }],
-    },
-    content: {
-      subject: template.subject,
-      plainText: template.text,
-      html: template.html,
-    },
-  });
-
-  const result = await poller.pollUntilDone();
-
-  if (!result || result.status !== "Succeeded") {
-    const details = result?.error?.message ?? "Unknown Azure Email error.";
-    throw new Error(`Failed to send OTP email: ${details}`);
-  }
+  await sendTransactionalEmail(email, template);
 };
 
 export const isValidEmail = (email: string) => {

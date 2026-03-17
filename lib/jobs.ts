@@ -57,6 +57,9 @@ type JobEntity = {
   workplaceType?: string;
   experienceLevel?: string;
   salaryCurrency?: string;
+  salaryMin?: number;
+  salaryMax?: number;
+  salaryVisible?: boolean;
   salaryRange?: string;
   vacancies?: number;
   maxRetryAttempts?: number;
@@ -89,7 +92,9 @@ export type JobRecord = {
   workplaceType: WorkplaceType;
   experienceLevel: ExperienceLevel;
   salaryCurrency: SalaryCurrency;
-  salaryRange: string;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryVisible: boolean;
   vacancies: number | null;
   maxRetryAttempts: number;
   atsEnabled: boolean;
@@ -125,7 +130,9 @@ export type UpsertJobInput = {
   workplaceType?: string;
   experienceLevel?: string;
   salaryCurrency?: string;
-  salaryRange?: string;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  salaryVisible?: boolean;
   vacancies?: number | null;
   maxRetryAttempts?: number | null;
   atsEnabled?: boolean;
@@ -206,6 +213,14 @@ const normalizeSalaryCurrency = (value: string | undefined): SalaryCurrency => {
   return SALARY_CURRENCIES.find((item) => item === value) ?? "LKR";
 };
 
+const normalizeSalaryValue = (value: number | null | undefined) => {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+
+  return Math.floor(value);
+};
+
 const normalizeVacancies = (value: number | null | undefined) => {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return null;
@@ -271,7 +286,9 @@ const toJobRecord = (entity: JobEntity): JobRecord => {
     workplaceType: normalizeWorkplaceType(entity.workplaceType),
     experienceLevel: normalizeExperienceLevel(entity.experienceLevel),
     salaryCurrency: normalizeSalaryCurrency(entity.salaryCurrency),
-    salaryRange: normalizeText(entity.salaryRange),
+    salaryMin: normalizeSalaryValue(entity.salaryMin),
+    salaryMax: normalizeSalaryValue(entity.salaryMax),
+    salaryVisible: Boolean(entity.salaryVisible),
     vacancies: normalizeVacancies(entity.vacancies),
     maxRetryAttempts: normalizeMaxRetryAttempts(entity.maxRetryAttempts),
     atsEnabled: Boolean(entity.atsEnabled),
@@ -297,13 +314,14 @@ export const getJobDisplayLabel = (job: Pick<JobRecord, "code" | "title">) => {
 };
 
 export const getSalaryDisplay = (
-  job: Pick<JobRecord, "salaryCurrency" | "salaryRange">,
+  job: Pick<JobRecord, "salaryCurrency" | "salaryMin" | "salaryMax" | "salaryVisible">,
 ) => {
-  if (!job.salaryRange) {
+  if (!job.salaryVisible || job.salaryMin === null || job.salaryMax === null) {
     return "";
   }
 
-  return `${job.salaryCurrency} ${job.salaryRange}`;
+  const formatter = new Intl.NumberFormat("en-US");
+  return `${job.salaryCurrency} ${formatter.format(job.salaryMin)} - ${formatter.format(job.salaryMax)}`;
 };
 
 export const getJobAtsConfigSignature = (
@@ -477,6 +495,9 @@ export const upsertJob = async (input: UpsertJobInput): Promise<JobRecord> => {
   const code = existing?.code ?? await getNextJobCode();
   const descriptionHtml = sanitizeRichHtml(input.descriptionHtml);
   const summary = normalizeText(input.summary) || stripHtml(descriptionHtml);
+  const salaryMin = normalizeSalaryValue(input.salaryMin);
+  const salaryMax = normalizeSalaryValue(input.salaryMax);
+  const hasCompleteSalaryRange = salaryMin !== null && salaryMax !== null && salaryMin <= salaryMax;
 
   const entity: JobEntity = {
     partitionKey: JOB_SCOPE,
@@ -492,7 +513,10 @@ export const upsertJob = async (input: UpsertJobInput): Promise<JobRecord> => {
     workplaceType: normalizeWorkplaceType(input.workplaceType),
     experienceLevel: normalizeExperienceLevel(input.experienceLevel),
     salaryCurrency: normalizeSalaryCurrency(input.salaryCurrency),
-    salaryRange: normalizeText(input.salaryRange),
+    salaryMin: hasCompleteSalaryRange ? salaryMin : undefined,
+    salaryMax: hasCompleteSalaryRange ? salaryMax : undefined,
+    salaryVisible: hasCompleteSalaryRange ? Boolean(input.salaryVisible) : false,
+    salaryRange: "",
     vacancies: normalizeVacancies(input.vacancies) ?? undefined,
     maxRetryAttempts: normalizeMaxRetryAttempts(input.maxRetryAttempts),
     atsEnabled: Boolean(input.atsEnabled),
@@ -540,7 +564,10 @@ export const deleteJob = async (id: string, deletedBy: string) => {
     workplaceType: existing.workplaceType,
     experienceLevel: existing.experienceLevel,
     salaryCurrency: existing.salaryCurrency,
-    salaryRange: existing.salaryRange,
+    salaryMin: existing.salaryMin ?? undefined,
+    salaryMax: existing.salaryMax ?? undefined,
+    salaryVisible: existing.salaryVisible,
+    salaryRange: "",
     vacancies: existing.vacancies ?? undefined,
     maxRetryAttempts: existing.maxRetryAttempts,
     atsEnabled: existing.atsEnabled,

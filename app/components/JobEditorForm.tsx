@@ -37,7 +37,9 @@ const EMPTY_JOB_FORM: JobFormState = {
   workplaceType: "On-site",
   experienceLevel: "Mid level",
   salaryCurrency: "LKR",
-  salaryRange: "",
+  salaryMin: "",
+  salaryMax: "",
+  salaryVisible: false,
   vacancies: "1",
   maxRetryAttempts: "0",
   atsEnabled: false,
@@ -62,7 +64,9 @@ const toJobFormState = (job: JobRecord): JobFormState => ({
   workplaceType: job.workplaceType,
   experienceLevel: job.experienceLevel,
   salaryCurrency: job.salaryCurrency,
-  salaryRange: job.salaryRange,
+  salaryMin: job.salaryMin !== null ? String(job.salaryMin) : "",
+  salaryMax: job.salaryMax !== null ? String(job.salaryMax) : "",
+  salaryVisible: job.salaryVisible,
   vacancies: job.vacancies ? String(job.vacancies) : "1",
   maxRetryAttempts: String(job.maxRetryAttempts ?? 0),
   atsEnabled: job.atsEnabled,
@@ -112,6 +116,9 @@ export function JobEditorForm({
             ...jobForm,
             vacancies: Number(jobForm.vacancies) || 1,
             maxRetryAttempts: Math.max(0, Number(jobForm.maxRetryAttempts) || 0),
+            salaryMin: jobForm.salaryMin.trim() ? Math.max(0, Number(jobForm.salaryMin) || 0) : null,
+            salaryMax: jobForm.salaryMax.trim() ? Math.max(0, Number(jobForm.salaryMax) || 0) : null,
+            salaryVisible: Boolean(jobForm.salaryVisible),
             atsEnabled: Boolean(jobForm.atsEnabled),
             atsRequiredKeywords: jobForm.atsRequiredKeywords,
             atsPreferredKeywords: jobForm.atsPreferredKeywords,
@@ -299,8 +306,9 @@ export function JobEditorForm({
                 <input value={jobForm.location} onChange={(event) => setJobForm((current) => ({ ...current, location: event.target.value }))} placeholder="Colombo, Sri Lanka" className="h-12 w-full rounded-xl border border-[var(--color-border)] bg-white px-4 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]" />
               </label>
               <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-slate-800">Salary range</span>
-                <div className="grid grid-cols-[110px_minmax(0,1fr)] gap-2">
+                <span className="mb-2 block text-sm font-semibold text-slate-800">Salary details</span>
+                <div className="grid gap-3">
+                  <div className="grid grid-cols-[110px_minmax(0,1fr)_minmax(0,1fr)] gap-2">
                   <select
                     value={jobForm.salaryCurrency}
                     onChange={(event) => setJobForm((current) => ({ ...current, salaryCurrency: event.target.value }))}
@@ -308,8 +316,35 @@ export function JobEditorForm({
                   >
                     {SALARY_CURRENCIES.map((item) => <option key={item} value={item}>{item}</option>)}
                   </select>
-                  <input value={jobForm.salaryRange} onChange={(event) => setJobForm((current) => ({ ...current, salaryRange: event.target.value }))} placeholder="250,000 - 350,000 / month" className="h-12 w-full rounded-xl border border-[var(--color-border)] bg-white px-4 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]" />
+                    <input
+                      type="number"
+                      min={0}
+                      value={jobForm.salaryMin}
+                      onChange={(event) => setJobForm((current) => ({ ...current, salaryMin: event.target.value }))}
+                      placeholder="Min salary"
+                      className="h-12 w-full rounded-xl border border-[var(--color-border)] bg-white px-4 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      value={jobForm.salaryMax}
+                      onChange={(event) => setJobForm((current) => ({ ...current, salaryMax: event.target.value }))}
+                      placeholder="Max salary"
+                      className="h-12 w-full rounded-xl border border-[var(--color-border)] bg-white px-4 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[rgba(165,235,46,0.18)]"
+                    />
+                  </div>
+                  <label className="flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm text-[var(--color-ink)]">
+                    <input
+                      type="checkbox"
+                      checked={jobForm.salaryVisible}
+                      onChange={(event) => setJobForm((current) => ({ ...current, salaryVisible: event.target.checked }))}
+                    />
+                    Show salary on the job page
+                  </label>
                 </div>
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  Salary is optional. Leave both min and max empty to create the job without salary details.
+                </p>
               </label>
               <label className="block">
                 <span className="mb-2 block text-sm font-semibold text-slate-800">Open positions</span>

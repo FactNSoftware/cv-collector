@@ -290,7 +290,12 @@ export function AdminJobCandidates({
 
     setItems((current) => current.map((item) => (item.id === id ? payload.item : item)));
     setActiveAtsDetails((current) => (current?.id === id ? payload.item : current));
-    showToast(payload.message || "Application updated successfully.");
+    const successMessage = payload.message || (
+      reviewStatus === "accepted"
+        ? "Application accepted, chat created, and candidate notified by email."
+        : "Application updated successfully."
+    );
+    showToast(successMessage);
   }, [showToast]);
 
   const deleteApplication = useCallback(async (id: string) => {

@@ -7,7 +7,6 @@ import type { AdminAccount } from "../../lib/admin-access";
 import type { PageInfo } from "../../lib/pagination";
 import { AdminAccountsCardView } from "./AdminAccountsCardView";
 import { AdminDataTable } from "./AdminDataTable";
-import { AdminRowActionMenu } from "./AdminRowActionMenu";
 import { AdminViewModeToggle } from "./AdminViewModeToggle";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { LoadingOverlay } from "./LoadingOverlay";
@@ -267,24 +266,27 @@ export function AdminSettingsPortal({
             </button>
           </div>
         ) : (
-          <div className="flex justify-end">
-            <AdminRowActionMenu
-              items={[
-                {
-                  label: "Edit",
-                  icon: <Pencil className="h-4 w-4" />,
-                  onSelect: () => startEditingAdmin(admin.email),
-                  disabled: busyAdminEmail === admin.email,
-                },
-                {
-                  label: admin.email === sessionEmail ? "Cannot Delete Self" : "Delete",
-                  icon: <Trash2 className="h-4 w-4" />,
-                  onSelect: () => setPendingDeleteAdminEmail(admin.email),
-                  disabled: busyAdminEmail === admin.email || admin.email === sessionEmail,
-                  tone: "danger",
-                },
-              ]}
-            />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => startEditingAdmin(admin.email)}
+              disabled={busyAdminEmail === admin.email}
+              aria-label={`Edit ${admin.email}`}
+              title="Edit admin"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--color-border)] bg-white text-[var(--color-ink)] transition hover:border-[var(--color-border-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingDeleteAdminEmail(admin.email)}
+              disabled={busyAdminEmail === admin.email || admin.email === sessionEmail}
+              aria-label={admin.email === sessionEmail ? `Cannot delete ${admin.email}` : `Delete ${admin.email}`}
+              title={admin.email === sessionEmail ? "You cannot delete your own admin account" : "Delete admin"}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-rose-300 bg-white text-rose-700 transition hover:border-rose-400 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
           </div>
         );
       },

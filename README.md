@@ -40,6 +40,7 @@ This is cheaper than the previous App Service + Cosmos DB approach for a small o
 - `AZURE_TABLES_TABLE_NAME`
 - `AZURE_COMMUNICATION_CONNECTION_STRING`
 - `AZURE_EMAIL_SENDER_ADDRESS`
+- `APP_BASE_URL`
 - `AUTH_SECRET`
 - `ADMIN_PERMISSION_TOKEN`
 - `ADMIN_PERMISSION_TOKEN_EXPIRES_AT`
@@ -49,6 +50,8 @@ This is cheaper than the previous App Service + Cosmos DB approach for a small o
 `AZURE_BLOB_CONNECTION_STRING` is still supported as a fallback for backward compatibility, but the preferred variable is `AZURE_STORAGE_CONNECTION_STRING`.
 
 If `OPENAI_API_KEY` is configured, CV submissions use AI-assisted ATS extraction on the backend and store a structured scoring result for admin review. If it is not configured, the app falls back to rules-based keyword matching so submissions still work.
+
+`APP_BASE_URL` is used in transactional links sent by email, including admin invite/login emails. If it is not set, the app falls back to `https://recruitment.factnsoftware.com`.
 
 ## Authentication And Session Flow
 

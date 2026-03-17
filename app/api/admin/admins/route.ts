@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { recordAdminAuditEvent } from "../../../../lib/audit-log";
 import { requireAdminApiSession } from "../../../../lib/auth-guards";
+import { buildAdminInviteEmailTemplate } from "../../../../lib/admin-invite-email-template";
+import { getAppBaseUrl } from "../../../../lib/app-url";
 import {
   createAdminAccount,
   listAdminAccounts,
 } from "../../../../lib/admin-access";
 import { ensureCandidateProfile } from "../../../../lib/candidate-profile";
+import { sendTransactionalEmail } from "../../../../lib/email-service";
 import { getCursorParam, getPageLimit, paginateItems } from "../../../../lib/pagination";
 
 export const runtime = "nodejs";
@@ -56,6 +59,25 @@ export async function POST(request: Request) {
 
     await ensureCandidateProfile(email);
     const admin = await createAdminAccount(email, auth.session.email);
+    let inviteEmailWarning: string | null = null;
+
+    try {
+      await sendTransactionalEmail(
+        admin.email,
+        buildAdminInviteEmailTemplate({
+          recipientEmail: admin.email,
+          inviterEmail: auth.session.email,
+          loginUrl: getAppBaseUrl(),
+        }),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown email delivery error.";
+      inviteEmailWarning = "Admin account created, but the invitation email could not be sent.";
+      console.error("Failed to send admin invite email", {
+        email: admin.email,
+        error: message,
+      });
+    }
 
     await recordAdminAuditEvent({
       actorEmail: auth.session.email,
@@ -69,8 +91,9 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({
-      message: "Admin account created successfully.",
+      message: inviteEmailWarning ?? "Admin account created and invitation email sent successfully.",
       item: admin,
+      inviteEmailWarning,
     });
   } catch (error) {
     console.error("Failed to create admin", error);

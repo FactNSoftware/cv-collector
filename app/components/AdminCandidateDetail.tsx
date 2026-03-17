@@ -118,7 +118,12 @@ export function AdminCandidateDetail({
     }
 
     setItems((current) => current.map((item) => (item.id === id ? payload.item : item)));
-    showToast(payload.message || "Application updated successfully.");
+    const successMessage = payload.message || (
+      reviewStatus === "accepted"
+        ? "Application accepted, chat created, and candidate notified by email."
+        : "Application updated successfully."
+    );
+    showToast(successMessage);
   };
 
   const deleteApplication = async (id: string) => {

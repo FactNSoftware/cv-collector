@@ -32,7 +32,7 @@ export function JobDetailContent({
           icon: MapPin,
         }
       : null,
-    job.salaryRange
+    getSalaryDisplay(job)
       ? {
           label: "Salary Range",
           value: getSalaryDisplay(job),

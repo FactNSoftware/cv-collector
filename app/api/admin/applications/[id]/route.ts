@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { enqueueAtsProcessing, triggerAtsQueueProcessing } from "../../../../../lib/ats-queue";
 import { recordAdminAuditEvent } from "../../../../../lib/audit-log";
+import { buildCandidateChatEmailTemplate } from "../../../../../lib/candidate-chat-email-template";
 import { requireAdminApiSession } from "../../../../../lib/auth-guards";
 import { ensureApplicationChatForSubmission } from "../../../../../lib/acs-chat";
+import { getAppBaseUrl } from "../../../../../lib/app-url";
 import {
   getCvSubmissionById,
   deleteCvSubmission,
@@ -11,6 +13,7 @@ import {
   AtsRecalculationError,
   InvalidApplicationReviewTransitionError,
 } from "../../../../../lib/cv-storage";
+import { sendTransactionalEmail } from "../../../../../lib/email-service";
 import { getJobById, hasEffectiveAtsCriteria } from "../../../../../lib/jobs";
 
 export const runtime = "nodejs";
@@ -70,10 +73,34 @@ export async function PATCH(
     });
 
     let chatProvisioningWarning: string | null = null;
+    let candidateEmailWarning: string | null = null;
 
     if (body.reviewStatus === "accepted") {
       try {
         const chat = await ensureApplicationChatForSubmission(updated, auth.session.email);
+        const appBaseUrl = getAppBaseUrl();
+        const chatUrl = `${appBaseUrl}/applications/chat/${updated.id}`;
+
+        try {
+          await sendTransactionalEmail(
+            updated.email,
+            buildCandidateChatEmailTemplate({
+              recipientEmail: updated.email,
+              jobCode: updated.jobCode,
+              jobTitle: updated.jobTitle,
+              loginUrl: appBaseUrl,
+              chatUrl,
+            }),
+          );
+        } catch (emailError) {
+          const message = emailError instanceof Error ? emailError.message : "Unknown email delivery error.";
+          candidateEmailWarning = "Application accepted and chat created, but the candidate email could not be sent.";
+          console.error("Failed to send candidate acceptance chat email", {
+            applicationId: updated.id,
+            email: updated.email,
+            error: message,
+          });
+        }
 
         await recordAdminAuditEvent({
           actorEmail: auth.session.email,
@@ -88,6 +115,7 @@ export async function PATCH(
             candidateEmail: updated.email,
             jobCode: updated.jobCode,
             chatThreadId: chat.chatThreadId,
+            candidateEmailSent: !candidateEmailWarning,
           },
         });
       } catch (chatError) {
@@ -114,9 +142,14 @@ export async function PATCH(
     }
 
     return NextResponse.json({
-      message: chatProvisioningWarning || "Application updated successfully.",
+      message: chatProvisioningWarning || candidateEmailWarning || (
+        body.reviewStatus === "accepted"
+          ? "Application accepted, chat created, and candidate notified by email."
+          : "Application updated successfully."
+      ),
       item: updated,
       chatProvisioningWarning,
+      candidateEmailWarning,
     });
   } catch (error) {
     if (error instanceof InvalidApplicationReviewTransitionError) {

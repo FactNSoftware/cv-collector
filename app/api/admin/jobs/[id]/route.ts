@@ -16,7 +16,9 @@ type JobPayload = {
   workplaceType?: string;
   experienceLevel?: string;
   salaryCurrency?: string;
-  salaryRange?: string;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  salaryVisible?: boolean;
   vacancies?: number | null;
   maxRetryAttempts?: number | null;
   atsEnabled?: boolean;
@@ -67,7 +69,9 @@ export async function PATCH(
       workplaceType: body.workplaceType ?? "",
       experienceLevel: body.experienceLevel ?? "",
       salaryCurrency: body.salaryCurrency ?? "LKR",
-      salaryRange: body.salaryRange ?? "",
+      salaryMin: typeof body.salaryMin === "number" ? body.salaryMin : null,
+      salaryMax: typeof body.salaryMax === "number" ? body.salaryMax : null,
+      salaryVisible: Boolean(body.salaryVisible),
       vacancies: typeof body.vacancies === "number" ? body.vacancies : null,
       maxRetryAttempts: typeof body.maxRetryAttempts === "number" ? body.maxRetryAttempts : 0,
       atsEnabled,
@@ -99,6 +103,9 @@ export async function PATCH(
         jobCode: job.code,
         title: job.title,
         isPublished: job.isPublished,
+        salaryVisible: job.salaryVisible,
+        salaryMin: job.salaryMin,
+        salaryMax: job.salaryMax,
         maxRetryAttempts: job.maxRetryAttempts,
         atsEnabled: job.atsEnabled,
         atsRequiredKeywordCount: job.atsRequiredKeywords.length,

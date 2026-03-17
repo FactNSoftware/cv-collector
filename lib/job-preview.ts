@@ -15,7 +15,9 @@ export type JobPreviewDraft = {
   workplaceType: string;
   experienceLevel: string;
   salaryCurrency: string;
-  salaryRange: string;
+  salaryMin: string;
+  salaryMax: string;
+  salaryVisible: boolean;
   vacancies: string;
   maxRetryAttempts: string;
   atsEnabled: boolean;
@@ -37,6 +39,9 @@ export const mergeJobPreviewDraft = (
   draft: JobPreviewDraft,
 ): JobRecord => {
   const vacancies = Number.parseInt(draft.vacancies, 10);
+  const salaryMin = Number.parseInt(draft.salaryMin, 10);
+  const salaryMax = Number.parseInt(draft.salaryMax, 10);
+  const hasCompleteSalaryRange = Number.isFinite(salaryMin) && salaryMin >= 0 && Number.isFinite(salaryMax) && salaryMax >= 0 && salaryMin <= salaryMax;
 
   return {
     ...savedJob,
@@ -55,7 +60,9 @@ export const mergeJobPreviewDraft = (
       ? draft.experienceLevel as JobRecord["experienceLevel"]
       : savedJob.experienceLevel,
     salaryCurrency: draft.salaryCurrency === "USD" ? "USD" : "LKR",
-    salaryRange: draft.salaryRange,
+    salaryMin: hasCompleteSalaryRange ? salaryMin : null,
+    salaryMax: hasCompleteSalaryRange ? salaryMax : null,
+    salaryVisible: hasCompleteSalaryRange ? Boolean(draft.salaryVisible) : false,
     vacancies: Number.isFinite(vacancies) && vacancies > 0 ? vacancies : null,
     maxRetryAttempts: Math.max(0, Number.parseInt(draft.maxRetryAttempts, 10) || 0),
     atsEnabled: Boolean(draft.atsEnabled),

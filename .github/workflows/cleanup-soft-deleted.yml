@@ -5,6 +5,16 @@ on:
     - cron: "0 2 * * *"
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+  STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
+  AZURE_BLOB_CONTAINER: cv-files
+  AZURE_TABLES_TABLE_NAME: cvcollector
+
 jobs:
   cleanup:
     runs-on: ubuntu-latest
@@ -16,10 +26,49 @@ jobs:
           node-version: 20
           cache: npm
 
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve storage connection string
+        id: resolve-storage
+        uses: azure/CLI@v2
+        env:
+          RESOURCE_GROUP: ${{ env.RESOURCE_GROUP }}
+          STORAGE_ACCOUNT_NAME: ${{ env.STORAGE_ACCOUNT_NAME }}
+        with:
+          inlineScript: |
+            set -euo pipefail
+
+            if [ -z "${RESOURCE_GROUP:-}" ]; then
+              echo "AZURE_RESOURCE_GROUP GitHub secret is required."
+              exit 1
+            fi
+
+            if [ -z "${STORAGE_ACCOUNT_NAME:-}" ]; then
+              echo "AZURE_STORAGE_ACCOUNT_NAME GitHub secret is required."
+              exit 1
+            fi
+
+            STORAGE_CONNECTION_STRING=$(az storage account show-connection-string \
+              --name "$STORAGE_ACCOUNT_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query connectionString \
+              --output tsv)
+
+            if [ -z "${STORAGE_CONNECTION_STRING:-}" ]; then
+              echo "Failed to resolve Azure storage connection string."
+              exit 1
+            fi
+
+            echo "storage_connection_string=$STORAGE_CONNECTION_STRING" >> "$GITHUB_OUTPUT"
+
       - run: npm ci
 
       - run: npm run cleanup:soft-deleted
         env:
-          AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
-          AZURE_BLOB_CONTAINER: ${{ secrets.AZURE_BLOB_CONTAINER }}
-          AZURE_TABLES_TABLE_NAME: ${{ secrets.AZURE_TABLES_TABLE_NAME }}
+          AZURE_STORAGE_CONNECTION_STRING: ${{ steps.resolve-storage.outputs.storage_connection_string }}
+          AZURE_BLOB_CONTAINER: ${{ env.AZURE_BLOB_CONTAINER }}
+          AZURE_TABLES_TABLE_NAME: ${{ env.AZURE_TABLES_TABLE_NAME }}
