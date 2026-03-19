@@ -65,6 +65,13 @@ Rules:
 - admin creation ensures a candidate profile exists for that email
 - soft-deleted admin accounts are excluded from normal admin checks
 
+Bootstrap and day-2 access flow:
+
+- first-admin bootstrap uses `POST /api/admin/register` and requires `ADMIN_PERMISSION_TOKEN`
+- bootstrap is intentionally disabled after the first active admin account exists
+- after bootstrap, new admins are created from the authenticated admin portal
+- all admin account lifecycle changes are written to audit logs
+
 ## Audit Logging
 
 Audit events capture:

@@ -6,6 +6,7 @@ CV Collector is a full-stack Next.js application for managing hiring workflows o
 
 See also:
 
+- [Deployment Credentials And Environments](./deployment-credentials-and-environments.md)
 - [Authentication And Access](./features/authentication-and-access.md)
 - [Candidate Experience](./features/candidate-experience.md)
 - [Job Management](./features/job-management.md)

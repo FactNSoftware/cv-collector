@@ -2,6 +2,8 @@
 
 This folder contains the Azure infrastructure-as-code for the CV Collector deployment.
 
+For GitHub OIDC, environment variable/secret setup, and branch deployment flow, see [docs/deployment-credentials-and-environments.md](/Users/factnsoftware/Documents/cv-collector/docs/deployment-credentials-and-environments.md).
+
 ## Why Bicep
 
 - Azure-native and smaller operational surface than Terraform for this stack

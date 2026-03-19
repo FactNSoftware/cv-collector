@@ -4,20 +4,33 @@ on:
   schedule:
     - cron: "0 2 * * *"
   workflow_dispatch:
+    inputs:
+      target_environment:
+        description: GitHub Environment name
+        required: true
+        default: prod
+        type: choice
+        options:
+          - prod
+          - dev
 
 permissions:
   id-token: write
   contents: read
 
 env:
-  RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
-  STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
-  AZURE_BLOB_CONTAINER: cv-files
-  AZURE_TABLES_TABLE_NAME: cvcollector
+  AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  STORAGE_ACCOUNT_NAME: ${{ vars.AZURE_STORAGE_ACCOUNT_NAME }}
+  AZURE_BLOB_CONTAINER: ${{ vars.AZURE_BLOB_CONTAINER }}
+  AZURE_TABLES_TABLE_NAME: ${{ vars.AZURE_TABLES_TABLE_NAME }}
 
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.target_environment || 'prod' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -26,11 +39,79 @@ jobs:
           node-version: 20
           cache: npm
 
-      - uses: azure/login@v2
+      - name: Validate Azure OIDC inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          is_guid() {
+            [[ "$1" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]
+          }
+
+          required=(AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID)
+          missing=0
+
+          for key in "${required[@]}"; do
+            value="${!key:-}"
+            if [[ -z "$value" ]]; then
+              echo "::error title=Missing Azure variable::${key} is required for Azure OIDC login."
+              missing=1
+            fi
+          done
+
+          if [[ "$missing" -ne 0 ]]; then
+            echo "::error title=OIDC setup required::Set AZURE_CLIENT_ID, AZURE_TENANT_ID, and AZURE_SUBSCRIPTION_ID GitHub variables."
+            exit 1
+          fi
+
+          for key in "${required[@]}"; do
+            value="${!key}"
+            if ! is_guid "$value"; then
+              echo "::error title=Invalid Azure variable format::${key} must be a GUID value."
+              exit 1
+            fi
+          done
+
+          echo "::notice::Expected federated credential subject: repo:${GITHUB_REPOSITORY}:ref:${GITHUB_REF}"
+
+      - name: Azure login (OIDC)
+        id: azure-login
+        continue-on-error: true
+        uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Fail with Azure OIDC guidance
+        if: steps.azure-login.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "::error title=Azure login failed::OIDC login did not succeed."
+          echo "::error title=AADSTS700016 common cause::AZURE_CLIENT_ID is not an app registration in tenant AZURE_TENANT_ID, or tenant ID is incorrect."
+          echo "::error title=Fix::Create/verify the app registration in the target tenant, add a federated credential with subject repo:${GITHUB_REPOSITORY}:ref:${GITHUB_REF}, then update AZURE_CLIENT_ID, AZURE_TENANT_ID, and AZURE_SUBSCRIPTION_ID variables."
+          exit 1
+
+      - name: Verify Azure context
+        if: steps.azure-login.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          actual_tenant="$(az account show --query tenantId -o tsv)"
+          actual_subscription="$(az account show --query id -o tsv)"
+
+          if [[ "$actual_tenant" != "$AZURE_TENANT_ID" ]]; then
+            echo "::error title=Tenant mismatch::Logged-in tenant ($actual_tenant) does not match AZURE_TENANT_ID."
+            exit 1
+          fi
+
+          if [[ "$actual_subscription" != "$AZURE_SUBSCRIPTION_ID" ]]; then
+            echo "::error title=Subscription mismatch::Logged-in subscription ($actual_subscription) does not match AZURE_SUBSCRIPTION_ID."
+            exit 1
+          fi
+
+          echo "::notice::Azure tenant and subscription context verified."
 
       - name: Resolve storage connection string
         id: resolve-storage
@@ -43,12 +124,22 @@ jobs:
             set -euo pipefail
 
             if [ -z "${RESOURCE_GROUP:-}" ]; then
-              echo "AZURE_RESOURCE_GROUP GitHub secret is required."
+              echo "AZURE_RESOURCE_GROUP GitHub variable is required."
               exit 1
             fi
 
             if [ -z "${STORAGE_ACCOUNT_NAME:-}" ]; then
-              echo "AZURE_STORAGE_ACCOUNT_NAME GitHub secret is required."
+              echo "AZURE_STORAGE_ACCOUNT_NAME GitHub variable is required."
+              exit 1
+            fi
+
+            if [ -z "${AZURE_BLOB_CONTAINER:-}" ]; then
+              echo "AZURE_BLOB_CONTAINER GitHub variable is required."
+              exit 1
+            fi
+
+            if [ -z "${AZURE_TABLES_TABLE_NAME:-}" ]; then
+              echo "AZURE_TABLES_TABLE_NAME GitHub variable is required."
               exit 1
             fi
 

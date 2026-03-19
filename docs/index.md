@@ -5,6 +5,7 @@ This documentation set breaks the application into linked feature areas so the p
 ## Start Here
 
 - [Project Overview](./project-overview.md)
+- [Deployment Credentials And Environments](./deployment-credentials-and-environments.md)
 - [Authentication And Access](./features/authentication-and-access.md)
 - [Candidate Experience](./features/candidate-experience.md)
 - [Job Management](./features/job-management.md)
@@ -17,9 +18,10 @@ This documentation set breaks the application into linked feature areas so the p
 ## Suggested Reading Order
 
 1. Read [Project Overview](./project-overview.md) for the system map.
-2. Read [Authentication And Access](./features/authentication-and-access.md) to understand portals and route protection.
-3. Follow either the [Candidate Experience](./features/candidate-experience.md) or [Admin Operations And Audit](./features/admin-operations.md) path.
-4. Use [Application Lifecycle](./features/application-lifecycle.md), [ATS Evaluation](./features/ats-evaluation.md), and [Chat And Messaging](./features/chat-and-messaging.md) for cross-cutting behavior.
+2. Read [Deployment Credentials And Environments](./deployment-credentials-and-environments.md) if you manage environments, credentials, and deployments.
+3. Read [Authentication And Access](./features/authentication-and-access.md) to understand portals and route protection.
+4. Follow either the [Candidate Experience](./features/candidate-experience.md) or [Admin Operations And Audit](./features/admin-operations.md) path.
+5. Use [Application Lifecycle](./features/application-lifecycle.md), [ATS Evaluation](./features/ats-evaluation.md), and [Chat And Messaging](./features/chat-and-messaging.md) for cross-cutting behavior.
 
 ## Feature Map
 

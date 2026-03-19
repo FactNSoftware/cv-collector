@@ -10,6 +10,7 @@ This is a full-stack Next.js app for OTP-protected CV submission and review.
 - [Code of Conduct](/Users/factnsoftware/Documents/cv-collector/CODE_OF_CONDUCT.md)
 - [Changelog](/Users/factnsoftware/Documents/cv-collector/CHANGELOG.md)
 - [Documentation Hub](/Users/factnsoftware/Documents/cv-collector/docs/index.md)
+- [Deployment Credentials And Environments](/Users/factnsoftware/Documents/cv-collector/docs/deployment-credentials-and-environments.md)
 - [Chat Integration Design](/Users/factnsoftware/Documents/cv-collector/docs/chat-integration.md)
 
 ## Ownership
@@ -319,7 +320,7 @@ If parsing fails:
 npm install
 ```
 
-2. Copy `.env.example` to `.env` and set values.
+2. Copy `.env.example` to `.env.local` and set values.
 
 3. Run the app:
 
@@ -355,22 +356,52 @@ Full guide: [infra/README.md](/Users/factnsoftware/Documents/cv-collector/infra/
 
 This repo includes [`.github/workflows/azure-container-apps.yml`](/Users/factnsoftware/Documents/cv-collector/.github/workflows/azure-container-apps.yml) for image build and deployment on pushes to `main`.
 
-Required GitHub secrets:
+Canonical operations guide: [Deployment Credentials And Environments](/Users/factnsoftware/Documents/cv-collector/docs/deployment-credentials-and-environments.md)
+
+The deployment and cleanup workflows now use GitHub Environments.
+
+- Push to `main` and scheduled cleanup runs use environment `prod`.
+- Manual runs (`workflow_dispatch`) can choose `prod` or `dev` via `target_environment`.
+
+Create a GitHub Environment named `prod` and set:
+
+Required environment variables:
 
 - `AZURE_CLIENT_ID`
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
 - `AZURE_RESOURCE_GROUP`
 - `AZURE_CONTAINER_APP_NAME`
-- `AZURE_CONTAINERAPP_ENVIRONMENT`
+- `AZURE_CONTAINERAPPS_ENVIRONMENT`
 - `AZURE_CONTAINER_REGISTRY_NAME`
 - `AZURE_CONTAINER_REGISTRY_LOGIN_SERVER`
 - `AZURE_STORAGE_ACCOUNT_NAME`
 - `AZURE_COMMUNICATION_SERVICE_NAME`
+- `AZURE_BLOB_CONTAINER`
+- `AZURE_TABLES_TABLE_NAME`
+- `APP_BASE_URL`
 - `AZURE_EMAIL_SENDER_ADDRESS`
+- `ADMIN_PERMISSION_TOKEN_EXPIRES_AT`
+- `ATS_OPENAI_MODEL`
+
+Required environment secrets:
+
 - `AUTH_SECRET`
 - `ADMIN_PERMISSION_TOKEN`
-- `ADMIN_PERMISSION_TOKEN_EXPIRES_AT`
+- `OPENAI_API_KEY`
+
+The cleanup workflow uses a subset of the environment variables above and does not require app secrets.
+
+When you add `dev` later, create a second GitHub Environment named `dev` with the same variable and secret names but dev values.
+
+Azure OIDC requirements for `azure/login@v2`:
+
+- `AZURE_CLIENT_ID` must be the Azure AD app registration (service principal) **application/client ID** in your target tenant.
+- `AZURE_TENANT_ID` must be the tenant where that app registration exists.
+- The app registration must have a federated credential whose subject matches your branch trigger, for example:
+  - `repo:FactNSoftware/cv-collector:ref:refs/heads/main`
+
+If login fails with `AADSTS700016`, it usually means `AZURE_CLIENT_ID` does not exist in `AZURE_TENANT_ID` or the federated credential is missing/mismatched.
 
 ## Notes
 
