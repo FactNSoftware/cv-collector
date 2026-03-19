@@ -62,6 +62,7 @@ type Props = {
   initialSettings: OrganizationBrandingSettings | null;
   platformHost: string;
   backHref?: string;
+  tenantFeatureKeys?: string[];
 };
 
 const DEFAULT_THEME: TenantTheme = {
@@ -228,6 +229,7 @@ export function TenantSettingsPortal({
   initialSettings,
   platformHost,
   backHref,
+  tenantFeatureKeys,
 }: Props) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -983,6 +985,7 @@ export function TenantSettingsPortal({
     <PortalShell
       portal={backHref ? "system" : "tenant"}
       organizationSlug={backHref ? undefined : organization.slug}
+      tenantFeatureKeys={backHref ? undefined : tenantFeatureKeys}
       sessionEmail={sessionEmail}
       eyebrow="Settings"
       title={organization.name}

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireOrganizationOwnerApiSession } from "../../../../../../lib/auth-guards";
+import { requireOrganizationFeatureApiSession } from "../../../../../../lib/auth-guards";
 import {
   getOrganizationBrandingSettingsBySlug,
   upsertOrganizationBrandingSettings,
@@ -14,7 +14,9 @@ export async function POST(
   context: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await context.params;
-  const auth = await requireOrganizationOwnerApiSession(request, slug);
+  const auth = await requireOrganizationFeatureApiSession(request, slug, "tenant_settings", {
+    ownerOnly: true,
+  });
 
   if ("response" in auth) {
     return auth.response;

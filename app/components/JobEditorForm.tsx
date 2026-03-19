@@ -25,6 +25,7 @@ type JobEditorFormProps = {
   initialJob?: JobRecord | null;
   portal?: "admin" | "tenant";
   organizationSlug?: string;
+  tenantFeatureKeys?: string[];
 };
 
 type JobFormState = JobPreviewDraft;
@@ -89,6 +90,7 @@ export function JobEditorForm({
   initialJob,
   portal = "admin",
   organizationSlug,
+  tenantFeatureKeys,
 }: JobEditorFormProps) {
   const isTenant = portal === "tenant" && !!organizationSlug;
   const jobsBasePath = isTenant ? `/o/${organizationSlug}/jobs` : "/admin/jobs";
@@ -239,6 +241,7 @@ export function JobEditorForm({
     <PortalShell
       portal={portal}
       organizationSlug={organizationSlug}
+      tenantFeatureKeys={tenantFeatureKeys}
       sessionEmail={sessionEmail}
       eyebrow={mode === "edit" && initialJob ? initialJob.code : "New Job"}
       title={mode === "edit" ? `Edit ${initialJob?.title ?? "job"}` : "Create a new job"}

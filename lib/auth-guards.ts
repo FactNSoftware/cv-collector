@@ -11,6 +11,12 @@ import {
   type OrganizationMembership,
   type OrganizationRecord,
 } from "./organizations";
+import { isFeatureEnabled } from "./feature-catalog";
+import {
+  resolveOrganizationSubscriptionAccess,
+  type EffectiveOrganizationSubscriptionAccess,
+  type SubscriptionRecord,
+} from "./subscriptions";
 import { isSuperAdminEmail } from "./super-admin-access";
 
 const UNAUTHORIZED_MESSAGE = "Unauthorized.";
@@ -26,6 +32,10 @@ type OrganizationApiAuthResult =
     organization: OrganizationRecord;
     membership: OrganizationMembership | null;
     isSuperAdmin: boolean;
+    effectiveSubscription: SubscriptionRecord | null;
+    featureKeys: string[];
+    functionalityKeys: string[];
+    featureAccessSource: EffectiveOrganizationSubscriptionAccess["source"];
   }
   | { response: NextResponse };
 
@@ -34,6 +44,10 @@ export type OrganizationPageSession = {
   organization: OrganizationRecord;
   membership: OrganizationMembership | null;
   isSuperAdmin: boolean;
+  effectiveSubscription: SubscriptionRecord | null;
+  featureKeys: string[];
+  functionalityKeys: string[];
+  featureAccessSource: EffectiveOrganizationSubscriptionAccess["source"];
 };
 
 export const requireApiSession = async (request: Request): Promise<ApiAuthResult> => {
@@ -151,11 +165,17 @@ const resolveOrganizationPageAccess = async (
     redirect("/applications");
   }
 
+  const featureAccess = await resolveOrganizationSubscriptionAccess(organization.id);
+
   return {
     session,
     organization,
     membership,
     isSuperAdmin,
+    effectiveSubscription: featureAccess.subscription,
+    featureKeys: featureAccess.featureKeys,
+    functionalityKeys: featureAccess.functionalityKeys,
+    featureAccessSource: featureAccess.source,
   };
 };
 
@@ -172,6 +192,22 @@ export const requireOrganizationOwnerPageSession = async (
 
   if (!access.isSuperAdmin && access.membership?.role !== "owner") {
     redirect("/applications");
+  }
+
+  return access;
+};
+
+export const requireOrganizationFeaturePageSession = async (
+  organizationSlug: string,
+  featureKey: string,
+  options?: { ownerOnly?: boolean },
+): Promise<OrganizationPageSession> => {
+  const access = options?.ownerOnly
+    ? await requireOrganizationOwnerPageSession(organizationSlug)
+    : await requireOrganizationAdminPageSession(organizationSlug);
+
+  if (!isFeatureEnabled(access.featureKeys, featureKey)) {
+    redirect(`/o/${organizationSlug}`);
   }
 
   return access;
@@ -233,11 +269,17 @@ export const requireOrganizationAccessApiSession = async (
     };
   }
 
+  const featureAccess = await resolveOrganizationSubscriptionAccess(organization.id);
+
   return {
     session: auth.session,
     organization,
     membership,
     isSuperAdmin,
+    effectiveSubscription: featureAccess.subscription,
+    featureKeys: featureAccess.featureKeys,
+    functionalityKeys: featureAccess.functionalityKeys,
+    featureAccessSource: featureAccess.source,
   };
 };
 
@@ -255,6 +297,32 @@ export const requireOrganizationOwnerApiSession = async (
     return {
       response: NextResponse.json(
         { message: UNAUTHORIZED_MESSAGE },
+        { status: 403 },
+      ),
+    };
+  }
+
+  return auth;
+};
+
+export const requireOrganizationFeatureApiSession = async (
+  request: Request,
+  organizationSlug: string,
+  featureKey: string,
+  options?: { ownerOnly?: boolean },
+): Promise<OrganizationApiAuthResult> => {
+  const auth = options?.ownerOnly
+    ? await requireOrganizationOwnerApiSession(request, organizationSlug)
+    : await requireOrganizationAccessApiSession(request, organizationSlug);
+
+  if ("response" in auth) {
+    return auth;
+  }
+
+  if (!isFeatureEnabled(auth.featureKeys, featureKey)) {
+    return {
+      response: NextResponse.json(
+        { message: `Feature ${featureKey} is not available for this organization.` },
         { status: 403 },
       ),
     };
@@ -286,7 +354,7 @@ export const getDefaultPortalPath = async (email: string) => {
     return "/admin";
   }
 
-  return "/applications";
+  return "/portal";
 };
 
 const isSafeInternalPath = (path: string) => {
@@ -302,7 +370,7 @@ export const getPostAuthRedirectPath = async (
     ? "/system"
     : access.isAdmin
       ? "/admin"
-      : "/applications";
+      : "/portal";
 
   if (!requestedPath || !isSafeInternalPath(requestedPath)) {
     return defaultPath;

@@ -1,4 +1,4 @@
-import { requireOrganizationAdminPageSession } from "../../../../lib/auth-guards";
+import { requireOrganizationFeaturePageSession } from "../../../../lib/auth-guards";
 import { listJobs } from "../../../../lib/jobs";
 import { TenantJobsPortal } from "../../../components/TenantJobsPortal";
 
@@ -8,7 +8,10 @@ type Props = { params: Promise<{ slug: string }> };
 
 export default async function TenantJobsPage({ params }: Props) {
   const { slug } = await params;
-  const { session, membership, isSuperAdmin } = await requireOrganizationAdminPageSession(slug);
+  const { session, membership, isSuperAdmin, featureKeys } = await requireOrganizationFeaturePageSession(
+    slug,
+    "tenant_jobs",
+  );
   const isOwnerOrAdmin =
     isSuperAdmin || membership?.role === "owner" || membership?.role === "admin";
 
@@ -18,6 +21,7 @@ export default async function TenantJobsPage({ params }: Props) {
     <TenantJobsPortal
       sessionEmail={session.email}
       organizationSlug={slug}
+      tenantFeatureKeys={featureKeys}
       jobs={jobs.filter((j) => !j.isDeleted)}
       isOwnerOrAdmin={isOwnerOrAdmin}
     />

@@ -7,6 +7,10 @@ import {
 import { requireSuperAdminApiSession } from "../../../../lib/auth-guards";
 import { ensureCandidateProfile } from "../../../../lib/candidate-profile";
 import { getCursorParam, getPageLimit } from "../../../../lib/pagination";
+import {
+  assignDefaultPublicSubscriptionToOrganizationIfAvailable,
+  assignSubscriptionToOrganization,
+} from "../../../../lib/subscriptions";
 
 export const runtime = "nodejs";
 
@@ -14,6 +18,7 @@ type CreateOrganizationPayload = {
   slug?: string;
   name?: string;
   ownerEmail?: string;
+  subscriptionId?: string | null;
 };
 
 export async function GET(request: Request) {
@@ -43,6 +48,11 @@ export async function POST(request: Request) {
     const slug = typeof body.slug === "string" ? body.slug.trim() : "";
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const ownerEmail = typeof body.ownerEmail === "string" ? body.ownerEmail.trim() : "";
+    const subscriptionId = typeof body.subscriptionId === "string"
+      ? body.subscriptionId.trim()
+      : body.subscriptionId === null
+        ? null
+        : undefined;
 
     if (!slug) {
       return NextResponse.json({ message: "Organization slug is required." }, { status: 400 });
@@ -63,6 +73,19 @@ export async function POST(request: Request) {
       ownerEmail,
       createdBy: auth.session.email,
     });
+
+    if (subscriptionId) {
+      await assignSubscriptionToOrganization({
+        organizationId: result.organization.id,
+        subscriptionId,
+        assignedBy: auth.session.email,
+      });
+    } else {
+      await assignDefaultPublicSubscriptionToOrganizationIfAvailable({
+        organizationId: result.organization.id,
+        assignedBy: auth.session.email,
+      });
+    }
 
     await recordAdminAuditEvent({
       actorEmail: auth.session.email,

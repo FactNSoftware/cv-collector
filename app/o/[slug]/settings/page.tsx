@@ -1,4 +1,4 @@
-import { requireOrganizationAdminPageSession } from "../../../../lib/auth-guards";
+import { requireOrganizationFeaturePageSession } from "../../../../lib/auth-guards";
 import { getOrganizationBrandingSettingsBySlug } from "../../../../lib/organization-branding";
 import { listOrganizationMemberships } from "../../../../lib/organizations";
 import { getAppBaseUrl } from "../../../../lib/app-url";
@@ -10,8 +10,8 @@ type Props = { params: Promise<{ slug: string }> };
 
 export default async function TenantSettingsPage({ params }: Props) {
   const { slug } = await params;
-  const { session, organization, membership, isSuperAdmin } =
-    await requireOrganizationAdminPageSession(slug);
+  const { session, organization, membership, isSuperAdmin, featureKeys } =
+    await requireOrganizationFeaturePageSession(slug, "tenant_settings");
 
   const isOwner = isSuperAdmin || membership?.role === "owner";
 
@@ -30,6 +30,7 @@ export default async function TenantSettingsPage({ params }: Props) {
       isOwner={isOwner}
       initialSettings={settings}
       platformHost={platformHost}
+      tenantFeatureKeys={featureKeys}
     />
   );
 }

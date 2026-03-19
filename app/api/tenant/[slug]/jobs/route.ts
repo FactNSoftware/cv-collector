@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { parseAtsKeywordInput } from "../../../../../lib/ats";
-import { requireOrganizationOwnerApiSession, requireOrganizationAccessApiSession } from "../../../../../lib/auth-guards";
+import {
+  requireOrganizationFeatureApiSession,
+} from "../../../../../lib/auth-guards";
 import { listJobs, upsertJob } from "../../../../../lib/jobs";
 
 export const runtime = "nodejs";
@@ -37,7 +39,7 @@ export async function GET(
   context: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await context.params;
-  const auth = await requireOrganizationAccessApiSession(request, slug);
+  const auth = await requireOrganizationFeatureApiSession(request, slug, "tenant_jobs");
 
   if ("response" in auth) {
     return auth.response;
@@ -52,7 +54,9 @@ export async function POST(
   context: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await context.params;
-  const auth = await requireOrganizationOwnerApiSession(request, slug);
+  const auth = await requireOrganizationFeatureApiSession(request, slug, "tenant_jobs", {
+    ownerOnly: true,
+  });
 
   if ("response" in auth) {
     return auth.response;

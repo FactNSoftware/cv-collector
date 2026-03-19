@@ -1,4 +1,38 @@
 const DEFAULT_APP_URL = "https://recruitment.factnsoftware.com";
+const LOCALHOST_SUFFIX = ".localhost";
+
+export const normalizeHost = (value: string | null | undefined) => {
+  if (!value) {
+    return "";
+  }
+
+  return value
+    .split(",")[0]
+    .trim()
+    .toLowerCase()
+    .replace(/\.$/, "")
+    .split(":")[0];
+};
+
+export const normalizeAuthority = (value: string | null | undefined) => {
+  if (!value) {
+    return "";
+  }
+
+  return value
+    .split(",")[0]
+    .trim()
+    .toLowerCase()
+    .replace(/\.$/, "");
+};
+
+export const getRequestHost = (headers: Headers | { get(name: string): string | null }) => {
+  return normalizeHost(headers.get("x-forwarded-host") ?? headers.get("host"));
+};
+
+export const getRequestAuthority = (headers: Headers | { get(name: string): string | null }) => {
+  return normalizeAuthority(headers.get("x-forwarded-host") ?? headers.get("host"));
+};
 
 export const getAppBaseUrl = () => {
   const configured = process.env.APP_BASE_URL?.trim() || process.env.NEXT_PUBLIC_APP_URL?.trim() || DEFAULT_APP_URL;
@@ -13,19 +47,12 @@ export const getAppBaseHost = () => {
   }
 };
 
-// Returns the cookie domain to use when setting the session cookie.
-// For production deployments this scopes the cookie to all tenant subdomains
-// (e.g. slug-a.example.com and slug-b.example.com) so a slug change does not
-// invalidate the current session. For localhost / bare IP addresses the domain
-// is left unset to avoid browser quirks with special hostnames.
 export const getSessionCookieDomain = (): string | undefined => {
-  const baseHost = getAppBaseHost();
-
-  if (!baseHost || baseHost === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(baseHost)) {
-    return undefined;
-  }
-
-  return `.${baseHost}`;
+  // Sessions are intentionally host-only. Root/base-host authentication and
+  // tenant-host authentication are bridged with an explicit portal handoff
+  // route, which is more reliable than attempting to share cookies across
+  // subdomains and localhost variants.
+  return undefined;
 };
 
 const TENANT_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -63,4 +90,44 @@ export const toTenantSubdomainUrl = (slug: string, path = "/") => {
   baseUrl.hostname = host;
   baseUrl.pathname = normalizedPath;
   return baseUrl.toString();
+};
+
+export const toTenantPortalUrl = ({
+  slug,
+  path = "/",
+  requestAuthority,
+  protocol = "https",
+}: {
+  slug: string;
+  path?: string;
+  requestAuthority?: string | null;
+  protocol?: string | null;
+}) => {
+  const normalizedSlug = slug.trim().toLowerCase();
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const normalizedProtocol = protocol === "http" || protocol === "https" ? protocol : "https";
+  const baseHost = getAppBaseHost();
+
+  if (baseHost && baseHost !== "localhost" && !/^\d+\.\d+\.\d+\.\d+$/.test(baseHost)) {
+    return toTenantSubdomainUrl(normalizedSlug, normalizedPath);
+  }
+
+  const authority = normalizeAuthority(requestAuthority);
+
+  if (!authority) {
+    return "";
+  }
+
+  const [hostPart, portPart] = authority.split(":");
+  const portSuffix = portPart ? `:${portPart}` : "";
+
+  if (hostPart === "localhost" || hostPart.endsWith(LOCALHOST_SUFFIX)) {
+    return `${normalizedProtocol}://${normalizedSlug}.localhost${portSuffix}${normalizedPath}`;
+  }
+
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(hostPart)) {
+    return "";
+  }
+
+  return `${normalizedProtocol}://${normalizedSlug}.${hostPart}${portSuffix}${normalizedPath}`;
 };

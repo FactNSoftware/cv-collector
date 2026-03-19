@@ -386,7 +386,7 @@ export function SuperAdminPortal({
       portal="system"
       sessionEmail={sessionEmail}
       eyebrow="System"
-      title={isDetailView ? selectedOrganization?.name : "Organizations"}
+      title={isDetailView ? (selectedOrganization?.name ?? "Organization") : "Organizations"}
       subtitle={isDetailView ? "Manage organization settings and members" : "Create organizations, assign members, and configure custom domain + full theme tokens per tenant."}
     >
       {isDetailView && backHref && (

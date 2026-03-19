@@ -9,6 +9,7 @@ import { PortalShell } from "./PortalShell";
 type Props = {
   sessionEmail: string;
   organizationSlug: string;
+  tenantFeatureKeys: string[];
   submissions: CvSubmissionRecord[];
 };
 
@@ -43,6 +44,7 @@ const ReviewBadge = ({ status }: { status: string }) => {
 export function TenantCandidatesPortal({
   sessionEmail,
   organizationSlug,
+  tenantFeatureKeys,
   submissions,
 }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -65,6 +67,7 @@ export function TenantCandidatesPortal({
     <PortalShell
       portal="tenant"
       organizationSlug={organizationSlug}
+      tenantFeatureKeys={tenantFeatureKeys}
       sessionEmail={sessionEmail}
       eyebrow="Candidates"
       title="All candidates"

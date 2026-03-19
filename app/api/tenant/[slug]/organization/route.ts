@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  requireOrganizationAccessApiSession,
-  requireOrganizationOwnerApiSession,
+  requireOrganizationFeatureApiSession,
 } from "../../../../../lib/auth-guards";
 import { updateOrganizationProfile } from "../../../../../lib/organizations";
 import { validateOrganizationLogoUrl } from "../../../../../lib/job-assets";
@@ -26,7 +25,7 @@ export async function GET(
   context: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await context.params;
-  const auth = await requireOrganizationAccessApiSession(request, slug);
+  const auth = await requireOrganizationFeatureApiSession(request, slug, "tenant_settings");
 
   if ("response" in auth) {
     return auth.response;
@@ -40,7 +39,9 @@ export async function PATCH(
   context: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await context.params;
-  const auth = await requireOrganizationOwnerApiSession(request, slug);
+  const auth = await requireOrganizationFeatureApiSession(request, slug, "tenant_settings", {
+    ownerOnly: true,
+  });
 
   if ("response" in auth) {
     return auth.response;

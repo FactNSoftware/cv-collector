@@ -11,7 +11,7 @@ type Props = { params: Promise<{ slug: string }> };
 
 export default async function TenantApplyPage({ params }: Props) {
   const { slug } = await params;
-  const { session } = await requireOrganizationAdminPageSession(slug);
+  const { session, featureKeys } = await requireOrganizationAdminPageSession(slug);
 
   const [profile, jobs, submissions] = await Promise.all([
     ensureCandidateProfile(session.email),
@@ -23,6 +23,7 @@ export default async function TenantApplyPage({ params }: Props) {
     <PortalShell
       portal="tenant"
       organizationSlug={slug}
+      tenantFeatureKeys={featureKeys}
       sessionEmail={session.email}
       eyebrow="Apply"
       title="Browse open positions"

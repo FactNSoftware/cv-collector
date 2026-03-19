@@ -27,7 +27,6 @@ export async function POST(request: Request) {
       message: "Organization created. Redirecting to your portal.",
       redirectPath: `/o/${slug}`,
     });
-
     response.cookies.set({
       name: SESSION_COOKIE_NAME,
       value: session.token,

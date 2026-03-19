@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getAppBaseHost, isValidTenantSlug } from "./lib/app-url";
 
 const BASE_HOST = getAppBaseHost();
+const LOCALHOST_SUFFIX = ".localhost";
 const TENANT_PATH_PATTERN = /^\/o\/([^/]+)(?:\/(.*))?$/;
 
 const PUBLIC_PATH_PREFIXES = ["/_next", "/api"];
@@ -10,6 +11,7 @@ const PUBLIC_PATH_EXACT = new Set([
   "/favicon.ico",
   "/icon.svg",
   "/opengraph-image",
+  "/portal-entry",
   "/robots.txt",
   "/sitemap.xml",
 ]);
@@ -45,6 +47,14 @@ const isPublicPath = (pathname: string) => {
 };
 
 const extractTenantSlugFromHost = (host: string) => {
+  if (process.env.NODE_ENV !== "production" && host.endsWith(LOCALHOST_SUFFIX)) {
+    const subdomain = host.slice(0, -LOCALHOST_SUFFIX.length);
+
+    if (subdomain && !subdomain.includes(".") && isValidTenantSlug(subdomain)) {
+      return subdomain;
+    }
+  }
+
   if (!BASE_HOST || host === BASE_HOST) {
     return null;
   }
@@ -144,11 +154,17 @@ export function proxy(request: NextRequest) {
 
   if (host === BASE_HOST) {
     const tenantPath = parseTenantPath(pathname);
+    const canCanonicalizeToSubdomain = (
+      (BASE_HOST && BASE_HOST !== "localhost" && !/^\d+\.\d+\.\d+\.\d+$/.test(BASE_HOST))
+      || host === "localhost"
+    );
 
     // Canonical URL: /o/<slug>/x on base host -> https://<slug>.<baseHost>/x
-    if (tenantPath) {
+    if (tenantPath && canCanonicalizeToSubdomain) {
       const redirectUrl = url.clone();
-      redirectUrl.hostname = `${tenantPath.slug}.${BASE_HOST}`;
+      redirectUrl.hostname = host === "localhost"
+        ? `${tenantPath.slug}.localhost`
+        : `${tenantPath.slug}.${BASE_HOST}`;
       redirectUrl.pathname = tenantPath.remainder;
       return NextResponse.redirect(redirectUrl, 308);
     }

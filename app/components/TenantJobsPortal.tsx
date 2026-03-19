@@ -11,6 +11,7 @@ import { useToast } from "./ToastProvider";
 type Props = {
   sessionEmail: string;
   organizationSlug: string;
+  tenantFeatureKeys: string[];
   jobs: JobRecord[];
   isOwnerOrAdmin: boolean;
 };
@@ -30,6 +31,7 @@ const JobStatusBadge = ({ isPublished }: { isPublished: boolean }) => (
 export function TenantJobsPortal({
   sessionEmail,
   organizationSlug,
+  tenantFeatureKeys,
   jobs: initialJobs,
   isOwnerOrAdmin,
 }: Props) {
@@ -98,6 +100,7 @@ export function TenantJobsPortal({
     <PortalShell
       portal="tenant"
       organizationSlug={organizationSlug}
+      tenantFeatureKeys={tenantFeatureKeys}
       sessionEmail={sessionEmail}
       eyebrow="Jobs"
       title="Job postings"

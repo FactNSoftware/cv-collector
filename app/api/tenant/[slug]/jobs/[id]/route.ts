@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { parseAtsKeywordInput } from "../../../../../../lib/ats";
-import { requireOrganizationOwnerApiSession } from "../../../../../../lib/auth-guards";
+import { requireOrganizationFeatureApiSession } from "../../../../../../lib/auth-guards";
 import { deleteJob, getJobById, upsertJob } from "../../../../../../lib/jobs";
 
 export const runtime = "nodejs";
@@ -37,7 +37,9 @@ export async function PATCH(
   context: { params: Promise<{ slug: string; id: string }> },
 ) {
   const { slug, id } = await context.params;
-  const auth = await requireOrganizationOwnerApiSession(request, slug);
+  const auth = await requireOrganizationFeatureApiSession(request, slug, "tenant_jobs", {
+    ownerOnly: true,
+  });
 
   if ("response" in auth) {
     return auth.response;
@@ -103,7 +105,9 @@ export async function DELETE(
   context: { params: Promise<{ slug: string; id: string }> },
 ) {
   const { slug, id } = await context.params;
-  const auth = await requireOrganizationOwnerApiSession(request, slug);
+  const auth = await requireOrganizationFeatureApiSession(request, slug, "tenant_jobs", {
+    ownerOnly: true,
+  });
 
   if ("response" in auth) {
     return auth.response;

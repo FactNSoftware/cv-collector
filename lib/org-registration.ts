@@ -6,6 +6,7 @@ import {
   isOrganizationSlugValid,
   listOrganizationsForMemberEmail,
 } from "./organizations";
+import { assignDefaultPublicSubscriptionToOrganizationIfAvailable } from "./subscriptions";
 
 const SCOPE = "org-registrations";
 const ENTITY_TYPE = "pending-org-registration";
@@ -164,13 +165,18 @@ export const startOrgRegistration = async (
 
   const slug = await generateUniqueSlug(orgName);
 
-  await createOrganization({
+  const result = await createOrganization({
     slug,
     name: orgName,
     ownerEmail,
     companySize: input.companySize,
     expectedUsers: input.expectedUsers,
     createdBy: "registration",
+  });
+
+  await assignDefaultPublicSubscriptionToOrganizationIfAvailable({
+    organizationId: result.organization.id,
+    assignedBy: "registration",
   });
 
   return { slug };
@@ -238,11 +244,16 @@ export const verifyOrgRegistration = async (
   // Activate: create org + add owner
   await ensureRegistrationLimitForOwnerEmail(email);
 
-  await createOrganization({
+  const result = await createOrganization({
     slug: record.slug,
     name: record.orgName,
     ownerEmail: email,
     createdBy: "registration",
+  });
+
+  await assignDefaultPublicSubscriptionToOrganizationIfAvailable({
+    organizationId: result.organization.id,
+    assignedBy: "registration",
   });
 
   // Clean up pending record

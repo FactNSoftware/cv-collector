@@ -12,6 +12,7 @@ import { useToast } from "./ToastProvider";
 type Props = {
   sessionEmail: string;
   organizationSlug: string;
+  tenantFeatureKeys?: string[];
   submissions: CvSubmissionRecord[];
 };
 
@@ -45,6 +46,7 @@ const ReviewBadge = ({ status }: { status: string }) => {
 export function TenantApplicationsPortal({
   sessionEmail,
   organizationSlug,
+  tenantFeatureKeys,
   submissions: initialSubmissions,
 }: Props) {
   const { showToast } = useToast();
@@ -81,6 +83,7 @@ export function TenantApplicationsPortal({
     <PortalShell
       portal="tenant"
       organizationSlug={organizationSlug}
+      tenantFeatureKeys={tenantFeatureKeys}
       sessionEmail={sessionEmail}
       eyebrow="Applications"
       title="My applications"

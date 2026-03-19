@@ -1,6 +1,8 @@
 import { getAuthSessionFromCookies } from "../../../lib/auth-session";
 import { getOrganizationBySlug } from "../../../lib/organizations";
+import { listOrganizationsForMemberEmail } from "../../../lib/organizations";
 import { resolveOrganizationAccess } from "../../../lib/organizations";
+import { resolveOrganizationSubscriptionAccess } from "../../../lib/subscriptions";
 import { isSuperAdminEmail } from "../../../lib/super-admin-access";
 import { TenantLoginForm } from "../../components/TenantLoginForm";
 import { TenantPortal } from "../../components/TenantPortal";
@@ -51,7 +53,30 @@ export default async function TenantPortalPage({ params, searchParams }: Props) 
     isSuperAdminEmail(session.email),
   ]);
 
-  if (!isSuperAdmin && !membership) {
+  let effectiveMembership = membership;
+
+  if (!isSuperAdmin && !effectiveMembership) {
+    const accessibleOrganizations = await listOrganizationsForMemberEmail(session.email);
+    const matchedAccess = accessibleOrganizations.find((item) => item.organization.slug === slug);
+
+    if (matchedAccess) {
+      effectiveMembership = {
+        organizationId: organization.id,
+        email: session.email.trim().toLowerCase(),
+        role: matchedAccess.role,
+        isRootOwner: matchedAccess.isRootOwner,
+        createdAt: organization.createdAt,
+        createdBy: organization.createdBy,
+        updatedAt: organization.updatedAt,
+        updatedBy: organization.updatedBy,
+        isDeleted: false,
+        deletedAt: null,
+        deletedBy: "",
+      };
+    }
+  }
+
+  if (!isSuperAdmin && !effectiveMembership) {
     // Authenticated but not a member — show login form so they can switch accounts
     return (
       <TenantLoginForm
@@ -64,12 +89,17 @@ export default async function TenantPortalPage({ params, searchParams }: Props) 
     );
   }
 
+  const featureAccess = await resolveOrganizationSubscriptionAccess(organization.id);
+
   return (
     <TenantPortal
       sessionEmail={session.email}
       organization={organization}
-      membership={membership ?? null}
+      membership={effectiveMembership ?? null}
       isSuperAdmin={isSuperAdmin}
+      featureKeys={featureAccess.featureKeys}
+      effectiveSubscription={featureAccess.subscription}
+      featureAccessSource={featureAccess.source}
     />
   );
 }

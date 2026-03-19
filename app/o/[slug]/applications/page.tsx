@@ -8,7 +8,7 @@ type Props = { params: Promise<{ slug: string }> };
 
 export default async function TenantApplicationsPage({ params }: Props) {
   const { slug } = await params;
-  const { session } = await requireOrganizationAdminPageSession(slug);
+  const { session, featureKeys } = await requireOrganizationAdminPageSession(slug);
 
   const submissions = await listCvSubmissionsByEmail(session.email);
 
@@ -16,6 +16,7 @@ export default async function TenantApplicationsPage({ params }: Props) {
     <TenantApplicationsPortal
       sessionEmail={session.email}
       organizationSlug={slug}
+      tenantFeatureKeys={featureKeys}
       submissions={submissions.filter((s) => !s.isDeleted)}
     />
   );

@@ -742,9 +742,9 @@ export const resolveOrganizationByCustomDomain = async (host: string | null) => 
     return null;
   }
 
-  // Treat missing `verified` as true for backward-compat (pre-verification
-  // deployments); treat explicit false as pending — domain not yet active.
-  if (domainEntity.verified === false) {
+  // Only explicitly verified domains are active. Pending / legacy entries
+  // without verification must not be used for routing.
+  if (domainEntity.verified !== true) {
     return null;
   }
 

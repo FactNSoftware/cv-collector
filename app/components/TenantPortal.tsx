@@ -4,39 +4,60 @@ import Link from "next/link";
 import { Building2, Settings, Users, Briefcase, LayoutGrid, Globe } from "lucide-react";
 import { PortalShell } from "./PortalShell";
 import type { OrganizationRecord, OrganizationMembership } from "../../lib/organizations";
+import { isFeatureEnabled } from "../../lib/feature-catalog";
+import type { SubscriptionRecord } from "../../lib/subscriptions";
 
 type Props = {
   sessionEmail: string;
   organization: OrganizationRecord;
   membership: OrganizationMembership | null;
   isSuperAdmin: boolean;
+  featureKeys: string[];
+  effectiveSubscription: SubscriptionRecord | null;
+  featureAccessSource: "subscription" | "legacy_default";
 };
 
-export function TenantPortal({ sessionEmail, organization, membership, isSuperAdmin }: Props) {
+export function TenantPortal({
+  sessionEmail,
+  organization,
+  membership,
+  isSuperAdmin,
+  featureKeys,
+  effectiveSubscription,
+  featureAccessSource,
+}: Props) {
   const role = membership?.role ?? null;
   const isOwnerOrAdmin = isSuperAdmin || role === "owner" || role === "admin";
 
+  const ownerCards = [
+        isFeatureEnabled(featureKeys, "tenant_jobs")
+          ? {
+            href: `/o/${organization.slug}/jobs`,
+            icon: Briefcase,
+            title: "Jobs",
+            description: "Manage your open positions and job postings.",
+          }
+          : null,
+        isFeatureEnabled(featureKeys, "tenant_candidates")
+          ? {
+            href: `/o/${organization.slug}/candidates`,
+            icon: Users,
+            title: "Candidates",
+            description: "Review applicants and manage your pipeline.",
+          }
+          : null,
+        isFeatureEnabled(featureKeys, "tenant_settings")
+          ? {
+            href: `/o/${organization.slug}/settings`,
+            icon: Settings,
+            title: "Settings",
+            description: "Branding, theme, custom domain, and members.",
+          }
+          : null,
+      ];
+
   const cards = isOwnerOrAdmin
-    ? [
-        {
-          href: `/o/${organization.slug}/jobs`,
-          icon: Briefcase,
-          title: "Jobs",
-          description: "Manage your open positions and job postings.",
-        },
-        {
-          href: `/o/${organization.slug}/candidates`,
-          icon: Users,
-          title: "Candidates",
-          description: "Review applicants and manage your pipeline.",
-        },
-        {
-          href: `/o/${organization.slug}/settings`,
-          icon: Settings,
-          title: "Settings",
-          description: "Branding, theme, custom domain, and members.",
-        },
-      ]
+    ? ownerCards.filter((card): card is NonNullable<(typeof ownerCards)[number]> => card !== null)
     : [
         {
           href: `/o/${organization.slug}/apply`,
@@ -57,6 +78,7 @@ export function TenantPortal({ sessionEmail, organization, membership, isSuperAd
       portal="tenant"
       sessionEmail={sessionEmail}
       organizationSlug={organization.slug}
+      tenantFeatureKeys={featureKeys}
       title={organization.name}
       eyebrow="Organization portal"
       subtitle={`${organization.slug} · ${role ?? (isSuperAdmin ? "super admin" : "")}`}
@@ -88,6 +110,16 @@ export function TenantPortal({ sessionEmail, organization, membership, isSuperAd
             <p className="mt-3 text-sm leading-6 text-[var(--color-muted)]">
               {organization.description}
             </p>
+          )}
+          {isOwnerOrAdmin && (
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-[var(--color-muted)]">
+              <span className="rounded-full border border-[var(--color-border)] bg-[var(--color-panel)] px-3 py-1.5">
+                Plan: {effectiveSubscription?.name ?? "Legacy default access"}
+              </span>
+              <span className="rounded-full border border-[var(--color-border)] bg-[var(--color-panel)] px-3 py-1.5">
+                Source: {featureAccessSource === "subscription" ? "subscription" : "default"}
+              </span>
+            </div>
           )}
           {(organization.websiteUrl || organization.contactEmail || organization.contactPhone || organization.location) && (
             <div className="mt-4 flex flex-wrap gap-2">
@@ -140,6 +172,12 @@ export function TenantPortal({ sessionEmail, organization, membership, isSuperAd
             </Link>
           ))}
         </div>
+
+        {isOwnerOrAdmin && cards.length === 0 && (
+          <div className="rounded-3xl border border-dashed border-[var(--color-border-strong)] bg-[var(--color-panel)] p-6 text-sm text-[var(--color-muted)]">
+            This organization currently has no active tenant admin features assigned. Add or update a subscription from the system subscriptions page.
+          </div>
+        )}
 
         {/* Setup nudge for owner if org is fresh */}
         {(role === "owner" || isSuperAdmin) && (

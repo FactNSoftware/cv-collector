@@ -16,6 +16,8 @@ import {
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { isFeatureEnabled } from "../../lib/feature-catalog";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { LogoutButton } from "./LogoutButton";
 
 type PortalShellProps = {
@@ -25,6 +27,7 @@ type PortalShellProps = {
   eyebrow: string;
   subtitle?: string;
   organizationSlug?: string;
+  tenantFeatureKeys?: string[];
   switchHref?: string;
   switchLabel?: string;
   secondaryActionHref?: string;
@@ -78,15 +81,29 @@ const CANDIDATE_NAV: NavItem[] = [
 const SYSTEM_NAV: NavItem[] = [
   { href: "/system", label: "Dashboard", icon: LayoutGrid },
   { href: "/system/organizations", label: "Organizations", icon: Building2, matchPrefix: "/system/organizations" },
+  { href: "/system/subscriptions", label: "Subscriptions", icon: ClipboardList, matchPrefix: "/system/subscriptions" },
   { href: "/system/users", label: "Super Admins", icon: ShieldCheck, matchPrefix: "/system/users" },
 ];
 
-const buildTenantNav = (slug: string): NavItem[] => [
-  { href: `/o/${slug}`, label: "Dashboard", icon: LayoutGrid },
-  { href: `/o/${slug}/jobs`, label: "Jobs", icon: BriefcaseBusiness, matchPrefix: `/o/${slug}/jobs` },
-  { href: `/o/${slug}/candidates`, label: "Candidates", icon: Users, matchPrefix: `/o/${slug}/candidates` },
-  { href: `/o/${slug}/settings`, label: "Settings", icon: Settings, matchPrefix: `/o/${slug}/settings` },
-];
+const buildTenantNav = (slug: string, tenantFeatureKeys?: string[]): NavItem[] => {
+  const items: NavItem[] = [
+    { href: `/o/${slug}`, label: "Dashboard", icon: LayoutGrid },
+  ];
+
+  if (isFeatureEnabled(tenantFeatureKeys ?? [], "tenant_jobs")) {
+    items.push({ href: `/o/${slug}/jobs`, label: "Jobs", icon: BriefcaseBusiness, matchPrefix: `/o/${slug}/jobs` });
+  }
+
+  if (isFeatureEnabled(tenantFeatureKeys ?? [], "tenant_candidates")) {
+    items.push({ href: `/o/${slug}/candidates`, label: "Candidates", icon: Users, matchPrefix: `/o/${slug}/candidates` });
+  }
+
+  if (isFeatureEnabled(tenantFeatureKeys ?? [], "tenant_settings")) {
+    items.push({ href: `/o/${slug}/settings`, label: "Settings", icon: Settings, matchPrefix: `/o/${slug}/settings` });
+  }
+
+  return items;
+};
 
 const normalizeTenantPath = (path: string, slug: string) => {
   const base = `/o/${slug}`;
@@ -168,6 +185,9 @@ const getBreadcrumbs = (
     }
     if (pathname === "/system/organizations") {
       return [{ href: "/system", label: "Dashboard" }, { label: "Organizations" }];
+    }
+    if (pathname === "/system/subscriptions") {
+      return [{ href: "/system", label: "Dashboard" }, { label: "Subscriptions" }];
     }
     if (pathname.startsWith("/system/organizations/")) {
       return [
@@ -303,6 +323,7 @@ export function PortalShell({
   eyebrow,
   subtitle,
   organizationSlug,
+  tenantFeatureKeys,
   switchHref,
   switchLabel,
   secondaryActionHref,
@@ -316,6 +337,8 @@ export function PortalShell({
   const [tenantOrganizations, setTenantOrganizations] = useState<TenantOrganizationOption[]>([]);
   const [isLoadingTenantOrganizations, setIsLoadingTenantOrganizations] = useState(false);
   const [cachedOrgName, setCachedOrgName] = useState<string | null>(null);
+  const [showTenantExitConfirm, setShowTenantExitConfirm] = useState(false);
+  const [isTenantExitLoading, setIsTenantExitLoading] = useState(false);
   const chatNavSnapshot = useSyncExternalStore(
     (onStoreChange) => {
       if (typeof window === "undefined") {
@@ -356,7 +379,7 @@ export function PortalShell({
     }
 
     if (portal === "tenant") {
-      return organizationSlug ? buildTenantNav(organizationSlug) : SYSTEM_NAV;
+      return organizationSlug ? buildTenantNav(organizationSlug, tenantFeatureKeys) : SYSTEM_NAV;
     }
 
     const chatItem: NavItem = {
@@ -375,7 +398,7 @@ export function PortalShell({
     return chatNavState.hasChats
       ? [CANDIDATE_NAV[0], CANDIDATE_NAV[1], CANDIDATE_NAV[2], chatItem, CANDIDATE_NAV[3]]
       : CANDIDATE_NAV;
-  }, [chatNavState.hasChats, organizationSlug, portal]);
+  }, [chatNavState.hasChats, organizationSlug, portal, tenantFeatureKeys]);
   const tenantSwitcherItems = useMemo(() => {
     if (portal !== "tenant") {
       return [] as TenantOrganizationOption[];
@@ -416,21 +439,21 @@ export function PortalShell({
     const normalizedTenantPath = currentTenantPath.startsWith("/")
       ? currentTenantPath
       : `/${currentTenantPath}`;
+    const hostname = window.location.hostname.toLowerCase();
+    const isTenantHost = hostname.startsWith(`${organizationSlug}.`) || hostname.endsWith(".localhost");
+    const switchPath = isTenantHost
+      ? (
+        normalizedTenantPath === "/"
+          ? `/switch/${nextSlug}`
+          : `/switch/${nextSlug}?next=${encodeURIComponent(normalizedTenantPath)}`
+      )
+      : (
+        normalizedTenantPath === "/"
+          ? `/o/${organizationSlug}/switch/${nextSlug}`
+          : `/o/${organizationSlug}/switch/${nextSlug}?next=${encodeURIComponent(normalizedTenantPath)}`
+      );
 
-    // Use a full browser navigation to avoid cross-origin CORS errors when middleware
-    // rewrites the path to a different subdomain (e.g. slug-a.host → slug-b.host).
-    const { protocol, hostname, host } = window.location;
-    if (hostname.startsWith(`${organizationSlug}.`)) {
-      // Subdomain routing: replace the current slug with the next slug.
-      const baseHostWithPort = host.slice(organizationSlug.length + 1);
-      window.location.href = `${protocol}//${nextSlug}.${baseHostWithPort}${normalizedTenantPath}`;
-    } else {
-      // Path-based routing (e.g. localhost without a slug subdomain).
-      const nextPath = normalizedTenantPath === "/"
-        ? `/o/${nextSlug}`
-        : `/o/${nextSlug}${normalizedTenantPath}`;
-      window.location.href = nextPath;
-    }
+    window.location.assign(switchPath);
   };
   const breadcrumbs = getBreadcrumbs(pathname, portal, title, organizationSlug);
   const candidatePortalMark = (
@@ -440,6 +463,32 @@ export function PortalShell({
     </div>
   );
   const systemPortalMark = <Building2 className="h-6 w-6" />; // keep for backward compat
+
+  useEffect(() => {
+    if (portal !== "tenant" || !organizationSlug) {
+      return;
+    }
+
+    const guardedUrl = window.location.href;
+    const sentinelMarker = {
+      tenantBackGuard: true,
+      slug: organizationSlug,
+      path: pathname,
+    };
+
+    window.history.pushState(sentinelMarker, "", guardedUrl);
+
+    const handlePopState = () => {
+      window.history.pushState(sentinelMarker, "", guardedUrl);
+      setShowTenantExitConfirm(true);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [organizationSlug, pathname, portal]);
 
   useEffect(() => {
     if (portal === "system" || portal === "tenant") {
@@ -560,9 +609,38 @@ export function PortalShell({
     };
   }, [portal, sessionEmail]);
 
+  const handleTenantExitConfirm = async () => {
+    setIsTenantExitLoading(true);
+
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch {
+      // Ignore logout failures and continue to the public home.
+    } finally {
+      const { protocol, port } = window.location;
+      const portSuffix = port ? `:${port}` : "";
+      window.location.assign(`${protocol}//lvh.me${portSuffix}/`);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[var(--color-canvas)] text-[var(--color-ink)]">
-      <div className="flex min-h-screen w-full gap-3 px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 lg:px-5 xl:px-6">
+    <>
+      <ConfirmDialog
+        isOpen={showTenantExitConfirm}
+        title="Leave this portal?"
+        message="Going back will log you out of the current organization portal and return you to the root portal."
+        confirmLabel="Logout"
+        loadingLabel="Logging out..."
+        tone="warning"
+        isLoading={isTenantExitLoading}
+        onConfirm={handleTenantExitConfirm}
+        onCancel={() => setShowTenantExitConfirm(false)}
+      />
+      <div className="min-h-screen bg-[var(--color-canvas)] text-[var(--color-ink)]">
+        <div className="flex min-h-screen w-full gap-3 px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 lg:px-5 xl:px-6">
         <aside className="sticky top-3 z-30 hidden h-[calc(100vh-24px)] w-[74px] shrink-0 overflow-visible flex-col rounded-[26px] border border-[var(--color-border-strong)] bg-[linear-gradient(180deg,var(--color-panel),var(--color-panel-strong))] p-2.5 shadow-[var(--shadow-soft)] lg:flex sm:top-4 sm:h-[calc(100vh-32px)]">
           <div className="mb-5 flex h-12 items-center justify-center rounded-[18px] bg-[var(--color-sidebar-accent)] text-[var(--color-sidebar-accent-ink)]">
             {portal === "candidate"
@@ -698,11 +776,6 @@ export function PortalShell({
                       {tenantSwitcherItems.map((item) => (
                         <option key={item.slug} value={item.slug}>
                           {item.name}
-                          {item.isRootOwner
-                            ? " (Root owner)"
-                            : item.role === "owner"
-                              ? " (Owner)"
-                              : ""}
                         </option>
                       ))}
                     </select>
@@ -740,37 +813,38 @@ export function PortalShell({
 
           <main className="min-w-0 flex-1">{children}</main>
         </div>
-      </div>
-
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--color-border-strong)] bg-[var(--color-panel)] px-3 py-3 backdrop-blur lg:hidden">
-        <div className="mx-auto flex max-w-screen-sm items-center justify-between gap-2 rounded-[24px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-2 shadow-[var(--shadow-soft)]">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = isActivePath(pathname, item, portal, organizationSlug);
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                title={item.label}
-                aria-label={item.label}
-                className={`theme-action-button relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] transition ${
-                  active
-                    ? "theme-surface-active"
-                    : "text-[var(--color-muted)] hover:bg-white"
-                }`}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                {item.label === "Chat" && chatNavState.unreadCount > 0 ? (
-                  <span className="absolute -right-1 -top-1 z-10 inline-flex min-w-[18px] items-center justify-center rounded-full border-2 border-[var(--color-panel)] bg-rose-500 px-1 text-[9px] font-semibold text-white shadow-sm">
-                    {chatNavState.unreadCount > 9 ? "9+" : chatNavState.unreadCount}
-                  </span>
-                ) : null}
-              </Link>
-            );
-          })}
         </div>
-      </nav>
-    </div>
+
+        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--color-border-strong)] bg-[var(--color-panel)] px-3 py-3 backdrop-blur lg:hidden">
+          <div className="mx-auto flex max-w-screen-sm items-center justify-between gap-2 rounded-[24px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-2 shadow-[var(--shadow-soft)]">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const active = isActivePath(pathname, item, portal, organizationSlug);
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  title={item.label}
+                  aria-label={item.label}
+                  className={`theme-action-button relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] transition ${
+                    active
+                      ? "theme-surface-active"
+                      : "text-[var(--color-muted)] hover:bg-white"
+                  }`}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {item.label === "Chat" && chatNavState.unreadCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 z-10 inline-flex min-w-[18px] items-center justify-center rounded-full border-2 border-[var(--color-panel)] bg-rose-500 px-1 text-[9px] font-semibold text-white shadow-sm">
+                      {chatNavState.unreadCount > 9 ? "9+" : chatNavState.unreadCount}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      </div>
+    </>
   );
 }

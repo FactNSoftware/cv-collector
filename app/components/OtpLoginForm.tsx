@@ -123,10 +123,10 @@ export function OtpLoginForm() {
 
                 <p className="mt-4 text-center text-sm text-[var(--color-muted)]">
                   Already have a portal?{" "}
-                  <span className="font-medium text-[var(--color-ink)]">
+                  <Link href="/portal" className="font-medium text-[var(--color-ink)] underline decoration-[var(--color-border-strong)] underline-offset-4 transition hover:text-[var(--color-brand-strong)]">
                     Open your organization&apos;s URL directly (for example{" "}
                     <span className="font-mono text-xs">your-slug.ourdomain</span>)
-                  </span>
+                  </Link>
                 </p>
                 <div className="mt-10 border-t border-[var(--color-border)] pt-6 text-center">
                   <Link
