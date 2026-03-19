@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
 import { COMPANY_SIZES, EXPECTED_USERS } from "../../lib/org-registration";
 import type { CompanySize, ExpectedUsers } from "../../lib/org-registration";
 import { LoadingOverlay } from "./LoadingOverlay";
@@ -12,12 +11,10 @@ type Props = {
 };
 
 export function OrganizationRegistrationForm({ onCancel }: Props) {
-  const router = useRouter();
   const { showToast } = useToast();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orgName, setOrgName] = useState("");
-  const [ownerName, setOwnerName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [companySize, setCompanySize] = useState<CompanySize | "">("");
   const [expectedUsers, setExpectedUsers] = useState<ExpectedUsers | "">("");
@@ -25,12 +22,13 @@ export function OrganizationRegistrationForm({ onCancel }: Props) {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
+    let shouldKeepSubmittingState = false;
 
     try {
       const response = await fetch("/api/org-registration", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgName, ownerName, ownerEmail, companySize, expectedUsers }),
+        body: JSON.stringify({ orgName, ownerEmail, companySize, expectedUsers }),
       });
 
       const payload = await response
@@ -52,12 +50,14 @@ export function OrganizationRegistrationForm({ onCancel }: Props) {
       const redirectPath = `${baseRedirectPath}${separator}email=${encodeURIComponent(ownerEmail.trim().toLowerCase())}`;
 
       showToast(payload.message || "Organization registered. Continue with portal login OTP.");
-      router.push(redirectPath);
-      router.refresh();
+      shouldKeepSubmittingState = true;
+      window.location.assign(redirectPath);
     } catch {
       showToast("Something went wrong. Please try again.", "error");
     } finally {
-      setIsSubmitting(false);
+      if (!shouldKeepSubmittingState) {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -103,23 +103,6 @@ export function OrganizationRegistrationForm({ onCancel }: Props) {
             placeholder="Acme Corp"
             value={orgName}
             onChange={(e) => setOrgName(e.target.value)}
-            className={inputClass}
-          />
-        </div>
-
-        <div className="space-y-1">
-          <label htmlFor="reg-owner-name" className={labelClass}>
-            Your name
-          </label>
-          <input
-            id="reg-owner-name"
-            type="text"
-            required
-            minLength={2}
-            maxLength={80}
-            placeholder="Jane Smith"
-            value={ownerName}
-            onChange={(e) => setOwnerName(e.target.value)}
             className={inputClass}
           />
         </div>

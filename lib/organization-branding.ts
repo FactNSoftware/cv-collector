@@ -8,6 +8,7 @@ import {
   getOrganizationBySlug,
   type OrganizationRecord,
 } from "./organizations";
+import { getAppBaseHost, isValidTenantSlug } from "./app-url";
 
 const ORGANIZATION_SETTINGS_TYPE = "organization-settings";
 const ORGANIZATION_SETTINGS_ROW_KEY = "branding";
@@ -23,6 +24,8 @@ type OrganizationBrandingEntity = {
   domainVerified?: boolean;
   domainVerifiedAt?: number;
   themeJson?: string;
+  tabTitle?: string;
+  tabIconUrl?: string;
   emailDomain?: string;
   emailDomainVerified?: boolean;
   emailDomainVerifiedAt?: number;
@@ -65,6 +68,8 @@ export type OrganizationBrandingSettings = {
   domainVerified: boolean;
   domainVerifiedAt: string | null;
   theme: TenantTheme;
+  tabTitle: string;
+  tabIconUrl: string | null;
   emailDomain: string | null;
   emailDomainVerified: boolean;
   emailDomainVerifiedAt: string | null;
@@ -96,6 +101,13 @@ export type TenantBrandingContext = {
   organization: OrganizationRecord | null;
   settings: OrganizationBrandingSettings | null;
   theme: TenantTheme;
+};
+
+export type TenantMetadata = {
+  title: string;
+  applicationName: string;
+  description: string;
+  iconUrl: string;
 };
 
 export const DEFAULT_TENANT_THEME: TenantTheme = {
@@ -252,8 +264,76 @@ const normalizeDomain = (value: string | null | undefined) => {
     .replace(/\.$/, "");
 };
 
+const normalizeOptionalText = (value: string | null | undefined, maxLength: number) => {
+  const normalized = typeof value === "string" ? value.trim() : "";
+
+  if (normalized.length > maxLength) {
+    throw new Error(`Value must be ${maxLength} characters or fewer.`);
+  }
+
+  return normalized;
+};
+
+const normalizeOptionalTabTitle = (value: string | null | undefined) => {
+  return normalizeOptionalText(value, 120);
+};
+
+const normalizeOptionalIconUrl = (value: string | null | undefined) => {
+  const normalized = normalizeOptionalText(value, 2048);
+
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.startsWith("/")) {
+    return normalized;
+  }
+
+  let parsed: URL;
+
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error("Tab icon URL must be a valid URL.");
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Tab icon URL must start with http:// or https://.");
+  }
+
+  return parsed.toString();
+};
+
 const isCustomDomainValid = (domain: string) => {
   return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(domain);
+};
+
+const LOCALHOST_SUFFIX = ".localhost";
+
+const getTenantSlugFromHost = (host: string) => {
+  const baseHost = getAppBaseHost();
+
+  if (baseHost && host !== baseHost) {
+    const suffix = `.${baseHost}`;
+
+    if (host.endsWith(suffix)) {
+      const subdomain = host.slice(0, -suffix.length);
+
+      if (subdomain && !subdomain.includes(".") && isValidTenantSlug(subdomain)) {
+        return subdomain;
+      }
+    }
+  }
+
+  if (process.env.NODE_ENV !== "production" && host.endsWith(LOCALHOST_SUFFIX)) {
+    const subdomain = host.slice(0, -LOCALHOST_SUFFIX.length);
+
+    if (subdomain && !subdomain.includes(".") && isValidTenantSlug(subdomain)) {
+      return subdomain;
+    }
+  }
+
+  return null;
 };
 
 const toBrandingSettings = (
@@ -270,6 +350,8 @@ const toBrandingSettings = (
         ? new Date(entity.domainVerifiedAt!).toISOString()
         : null,
     theme: parseThemeJson(entity.themeJson),
+    tabTitle: entity.tabTitle?.trim() || "",
+    tabIconUrl: normalizeOptionalIconUrl(entity.tabIconUrl) || null,
     emailDomain: normalizeDomain(entity.emailDomain) || null,
     emailDomainVerified: entity.emailDomainVerified === true,
     emailDomainVerifiedAt:
@@ -335,6 +417,40 @@ const deleteDomainEntity = async (domain: string) => {
     }
 
     throw error;
+  }
+};
+
+export const removeOrganizationBrandingSettingsByOrganizationId = async (
+  organizationId: string,
+) => {
+  const normalizedOrganizationId = organizationId.trim();
+
+  if (!normalizedOrganizationId) {
+    return;
+  }
+
+  const existingEntity = await getBrandingEntityByOrganizationId(normalizedOrganizationId);
+
+  if (!existingEntity) {
+    return;
+  }
+
+  const customDomain = normalizeDomain(existingEntity.customDomain);
+  const tableClient = await getAppTableClient();
+
+  try {
+    await tableClient.deleteEntity(
+      toSettingsPartitionKey(normalizedOrganizationId),
+      ORGANIZATION_SETTINGS_ROW_KEY,
+    );
+  } catch (error) {
+    if (!isTableNotFoundError(error)) {
+      throw error;
+    }
+  }
+
+  if (customDomain) {
+    await deleteDomainEntity(customDomain);
   }
 };
 
@@ -435,6 +551,8 @@ export const upsertOrganizationBrandingSettings = async ({
   slug,
   customDomain,
   theme,
+  tabTitle,
+  tabIconUrl,
   domainVerified,
   emailDomain,
   emailSenderName,
@@ -444,6 +562,8 @@ export const upsertOrganizationBrandingSettings = async ({
   slug: string;
   customDomain?: string | null;
   theme?: Partial<Record<keyof TenantTheme, string>>;
+  tabTitle?: string;
+  tabIconUrl?: string | null;
   /** Explicitly mark the current custom domain as DNS-verified (or reset to false). */
   domainVerified?: boolean;
   emailDomain?: string | null;
@@ -471,6 +591,8 @@ export const upsertOrganizationBrandingSettings = async ({
       organizationId: organization.id,
       customDomain: null,
       theme: { ...DEFAULT_TENANT_THEME },
+      tabTitle: "",
+      tabIconUrl: null,
       emailDomain: null,
       emailDomainVerified: false,
       emailDomainVerifiedAt: null,
@@ -487,6 +609,12 @@ export const upsertOrganizationBrandingSettings = async ({
     ...existingSettings.theme,
     ...normalizedThemePatch,
   };
+  const nextTabTitle = tabTitle !== undefined
+    ? normalizeOptionalTabTitle(tabTitle)
+    : existingSettings.tabTitle;
+  const nextTabIconUrl = tabIconUrl !== undefined
+    ? (normalizeOptionalIconUrl(tabIconUrl) || null)
+    : existingSettings.tabIconUrl;
 
   let nextCustomDomain = existingSettings.customDomain;
 
@@ -555,6 +683,8 @@ export const upsertOrganizationBrandingSettings = async ({
     domainVerified: nextDomainVerified,
     domainVerifiedAt: nextDomainVerifiedAt,
     themeJson: JSON.stringify(nextTheme),
+    tabTitle: nextTabTitle,
+    tabIconUrl: nextTabIconUrl || "",
     emailDomain: nextEmailDomain || "",
     emailDomainVerified: nextEmailDomainVerified,
     emailDomainVerifiedAt: nextEmailDomainVerifiedAt,
@@ -576,6 +706,26 @@ export const upsertOrganizationBrandingSettings = async ({
     settings: toBrandingSettings(entity),
     changedThemeKeys,
     domainChanged,
+  };
+};
+
+export const getTenantMetadata = (
+  organization: OrganizationRecord | null,
+  settings: OrganizationBrandingSettings | null,
+): TenantMetadata => {
+  const resolvedTitle = settings?.tabTitle?.trim()
+    || organization?.name?.trim()
+    || "Talent Workspace";
+  const resolvedIconUrl = settings?.tabIconUrl?.trim()
+    || organization?.logoUrl?.trim()
+    || "/icon.svg";
+
+  return {
+    title: resolvedTitle,
+    applicationName: resolvedTitle,
+    description: organization?.description?.trim()
+      || "A modern recruiting workspace for jobs, applications, candidate review, and hiring collaboration.",
+    iconUrl: resolvedIconUrl,
   };
 };
 
@@ -623,7 +773,11 @@ export const resolveTenantBrandingFromHost = async (
   }
 
   try {
-    const organization = await resolveOrganizationByCustomDomain(normalizedHost);
+    const organization = await resolveOrganizationByCustomDomain(normalizedHost)
+      ?? await (async () => {
+        const slug = getTenantSlugFromHost(normalizedHost);
+        return slug ? getOrganizationBySlug(slug) : null;
+      })();
 
     if (!organization) {
       return {

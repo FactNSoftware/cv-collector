@@ -1,5 +1,7 @@
+import type { Metadata } from "next";
 import {
   DEFAULT_TENANT_THEME,
+  getTenantMetadata,
   getOrganizationBrandingSettingsBySlug,
   toTenantCssVariables,
 } from "../../../lib/organization-branding";
@@ -37,4 +39,21 @@ export default async function TenantSlugLayout({ children, params }: Props) {
       {children}
     </div>
   );
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = (await params) as { slug: string };
+  const { organization, settings } = await getOrganizationBrandingSettingsBySlug(slug);
+  const tenantMetadata = getTenantMetadata(organization, settings);
+
+  return {
+    title: tenantMetadata.title,
+    description: tenantMetadata.description,
+    applicationName: tenantMetadata.applicationName,
+    icons: {
+      icon: tenantMetadata.iconUrl,
+      shortcut: tenantMetadata.iconUrl,
+      apple: tenantMetadata.iconUrl,
+    },
+  };
 }

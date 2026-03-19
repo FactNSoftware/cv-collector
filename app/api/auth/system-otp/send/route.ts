@@ -1,0 +1,38 @@
+import { NextResponse } from "next/server";
+import { OtpValidationError, sendLoginOtp } from "@/lib/auth-otp";
+import { isSuperAdminEmail } from "@/lib/super-admin-access";
+
+export const runtime = "nodejs";
+
+type SendSystemOtpPayload = {
+  email?: string;
+};
+
+export async function POST(request: Request) {
+  try {
+    const body = (await request.json()) as SendSystemOtpPayload;
+    const email = typeof body.email === "string" ? body.email : "";
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!(await isSuperAdminEmail(normalizedEmail))) {
+      return NextResponse.json(
+        { message: "This email does not have super admin access." },
+        { status: 403 },
+      );
+    }
+
+    await sendLoginOtp(normalizedEmail);
+
+    return NextResponse.json({ message: "OTP sent successfully." });
+  } catch (error) {
+    if (error instanceof OtpValidationError) {
+      return NextResponse.json({ message: error.message }, { status: 400 });
+    }
+
+    console.error("Failed to send system OTP", error);
+    return NextResponse.json(
+      { message: "Failed to send OTP." },
+      { status: 500 },
+    );
+  }
+}

@@ -61,6 +61,7 @@ type Props = {
   isOwner: boolean;
   initialSettings: OrganizationBrandingSettings | null;
   platformHost: string;
+  backHref?: string;
 };
 
 const DEFAULT_THEME: TenantTheme = {
@@ -226,6 +227,7 @@ export function TenantSettingsPortal({
   isOwner,
   initialSettings,
   platformHost,
+  backHref,
 }: Props) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -242,6 +244,7 @@ export function TenantSettingsPortal({
     description: organization.description ?? "",
   });
   const [isSavingOrganization, setIsSavingOrganization] = useState(false);
+  const [isSavingSlug, setIsSavingSlug] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [logoInputMode, setLogoInputMode] = useState<LogoInputMode>(() => {
     const currentLogoUrl = organization.logoUrl ?? "";
@@ -432,7 +435,7 @@ export function TenantSettingsPortal({
       return;
     }
 
-    setIsSavingOrganization(true);
+    setIsSavingSlug(true);
 
     try {
       const response = await fetch(`/api/tenant/${organization.slug}/organization`, {
@@ -451,6 +454,13 @@ export function TenantSettingsPortal({
       }
 
       showToast("Portal slug updated. Redirecting…");
+
+      if (backHref) {
+        // Super admin context — stay within system admin, go to new slug's detail page.
+        window.location.replace(backHref.replace(/\/$/, "") + `/${nextSlug}`);
+        return;
+      }
+
       // Navigate to the new slug settings page. Using window.location (hard nav)
       // follows the middleware subdomain redirect natively while the session
       // cookie (domain-scoped in production) travels to the new subdomain.
@@ -469,7 +479,7 @@ export function TenantSettingsPortal({
         window.location.replace(`/o/${nextSlug}/settings`);
       }
     } finally {
-      setIsSavingOrganization(false);
+      setIsSavingSlug(false);
     }
   };
 
@@ -681,6 +691,9 @@ export function TenantSettingsPortal({
   };
   const [emailDomainInput, setEmailDomainInput] = useState(initialSettings?.emailDomain ?? "");
   const [emailSenderNameInput, setEmailSenderNameInput] = useState(initialSettings?.emailSenderName ?? "");
+  const [tabTitleInput, setTabTitleInput] = useState(initialSettings?.tabTitle ?? "");
+  const [tabIconUrlInput, setTabIconUrlInput] = useState(initialSettings?.tabIconUrl ?? organization.logoUrl ?? "");
+  const [isSavingBrowserBranding, setIsSavingBrowserBranding] = useState(false);
   const [emailDomainPhase, setEmailDomainPhase] = useState<EmailDomainPhase>(() => {
     if (!initialSettings?.emailDomain) return "idle";
     if (initialSettings.emailDomainVerified) return "verified";
@@ -766,6 +779,9 @@ export function TenantSettingsPortal({
   const [isSavingTheme, setIsSavingTheme] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
 
+  const effectiveTabTitle = tabTitleInput.trim() || organizationDraft.name.trim() || organization.name;
+  const effectiveTabIcon = tabIconUrlInput.trim() || organizationDraft.logoUrl.trim() || organization.logoUrl || "/icon.svg";
+
   const applyThemeToPortal = (theme: TenantTheme) => {
     const root = document.querySelector<HTMLElement>("[data-tenant-theme]");
     if (!root) return;
@@ -800,6 +816,39 @@ export function TenantSettingsPortal({
       router.refresh();
     } finally {
       setIsSavingTheme(false);
+    }
+  };
+
+  const handleSaveBrowserBranding = async () => {
+    if (!isOwner) {
+      showToast("Only owners can update browser tab branding.", "warning");
+      return;
+    }
+
+    setIsSavingBrowserBranding(true);
+    try {
+      const response = await fetch(`/api/tenant/${organization.slug}/settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tabTitle: tabTitleInput.trim() || null,
+          tabIconUrl: tabIconUrlInput.trim() || null,
+        }),
+      });
+
+      const payload = await response
+        .json()
+        .catch(() => ({ message: "Failed to save browser branding." }));
+
+      if (!response.ok) {
+        showToast(payload.message || "Failed to save browser branding.", "error");
+        return;
+      }
+
+      showToast("Browser tab branding saved.");
+      router.refresh();
+    } finally {
+      setIsSavingBrowserBranding(false);
     }
   };
 
@@ -932,12 +981,12 @@ export function TenantSettingsPortal({
 
   return (
     <PortalShell
-      portal="tenant"
-      organizationSlug={organization.slug}
+      portal={backHref ? "system" : "tenant"}
+      organizationSlug={backHref ? undefined : organization.slug}
       sessionEmail={sessionEmail}
       eyebrow="Settings"
-      title="Organization settings"
-      subtitle="Configure your portal, branding, and team."
+      title={organization.name}
+      subtitle="Configure the organization portal, branding, and team."
     >
       <ConfirmDialog
         isOpen={!!pendingInvite}
@@ -1207,6 +1256,18 @@ export function TenantSettingsPortal({
                   />
                 </label>
 
+                <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel-strong)] px-4 py-3">
+                  <p className="text-xs font-medium text-[var(--color-muted)]">Company size</p>
+                  <p className="mt-0.5 text-sm text-[var(--color-ink)]">{organization.companySize ?? "-"}</p>
+                  <p className="mt-1 text-xs text-[var(--color-muted)]">Reference detail from initial registration.</p>
+                </div>
+
+                <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel-strong)] px-4 py-3">
+                  <p className="text-xs font-medium text-[var(--color-muted)]">Hiring volume</p>
+                  <p className="mt-0.5 text-sm text-[var(--color-ink)]">{organization.expectedUsers ?? "-"}</p>
+                  <p className="mt-1 text-xs text-[var(--color-muted)]">Reference detail from initial registration.</p>
+                </div>
+
                 <div className="sm:col-span-2 flex items-center justify-between gap-3">
                   <p className="text-xs text-[var(--color-muted)]">
                     Created {new Date(organization.createdAt).toLocaleDateString()} · Status {organization.status}
@@ -1233,6 +1294,14 @@ export function TenantSettingsPortal({
                 <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel-strong)] px-4 py-3">
                   <p className="text-xs font-medium text-[var(--color-muted)]">Created</p>
                   <p className="mt-0.5 text-sm text-[var(--color-ink)]">{new Date(organization.createdAt).toLocaleDateString()}</p>
+                </div>
+                <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel-strong)] px-4 py-3">
+                  <p className="text-xs font-medium text-[var(--color-muted)]">Company size</p>
+                  <p className="mt-0.5 text-sm text-[var(--color-ink)]">{organization.companySize ?? "-"}</p>
+                </div>
+                <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel-strong)] px-4 py-3">
+                  <p className="text-xs font-medium text-[var(--color-muted)]">Hiring volume</p>
+                  <p className="mt-0.5 text-sm text-[var(--color-ink)]">{organization.expectedUsers ?? "-"}</p>
                 </div>
                 {organization.websiteUrl && (
                   <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel-strong)] px-4 py-3">
@@ -1382,14 +1451,112 @@ export function TenantSettingsPortal({
                   <button
                     type="button"
                     onClick={() => void handleSaveSlug()}
-                    disabled={isSavingOrganization}
+                    disabled={isSavingSlug}
                     className="theme-btn-primary inline-flex h-9 items-center rounded-xl px-4 text-sm font-medium disabled:opacity-70"
                   >
-                    {isSavingOrganization ? "Saving..." : "Save new slug"}
+                    {isSavingSlug ? "Saving..." : "Save new slug"}
                   </button>
                 </div>
               )}
             </div>
+          </section>
+
+          <section className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-6 shadow-[var(--shadow-soft)]">
+            <h2 className="mb-2 text-base font-semibold text-[var(--color-ink)]">Browser tab branding</h2>
+            <p className="mb-4 text-sm text-[var(--color-muted)]">
+              When the organization host or custom domain is opened, the browser tab title and icon will use these values. If left empty, the portal falls back to the organization name and logo.
+            </p>
+
+            {isOwner ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="text-sm font-medium text-[var(--color-ink)]">
+                  Tab title
+                  <input
+                    type="text"
+                    value={tabTitleInput}
+                    onChange={(event) => setTabTitleInput(event.target.value)}
+                    placeholder={organization.name}
+                    className="mt-2 h-10 w-full rounded-xl border border-[var(--color-border)] bg-white px-3 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[var(--color-focus-ring)]"
+                  />
+                  <p className="mt-1 text-xs text-[var(--color-muted)]">
+                    Leave blank to use the organization name automatically.
+                  </p>
+                </label>
+
+                <label className="text-sm font-medium text-[var(--color-ink)]">
+                  Tab icon URL
+                  <input
+                    type="url"
+                    value={tabIconUrlInput}
+                    onChange={(event) => setTabIconUrlInput(event.target.value)}
+                    placeholder={organization.logoUrl ?? "https://cdn.example.com/favicon.png"}
+                    className="mt-2 h-10 w-full rounded-xl border border-[var(--color-border)] bg-white px-3 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[var(--color-focus-ring)]"
+                  />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {organizationDraft.logoUrl.trim() ? (
+                      <button
+                        type="button"
+                        onClick={() => setTabIconUrlInput(organizationDraft.logoUrl.trim())}
+                        className="inline-flex h-9 items-center rounded-xl border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-panel-strong)]"
+                      >
+                        Use organization logo
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setTabIconUrlInput("")}
+                      className="inline-flex h-9 items-center rounded-xl border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-panel-strong)]"
+                    >
+                      Clear icon
+                    </button>
+                  </div>
+                </label>
+
+                <div className="sm:col-span-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel-strong)] p-4">
+                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-[var(--color-muted)]">Preview</p>
+                  <div className="mt-3 flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-white px-4 py-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={effectiveTabIcon}
+                      alt="Tab icon preview"
+                      className="h-6 w-6 rounded"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--color-ink)]">{effectiveTabTitle}</p>
+                      <p className="text-xs text-[var(--color-muted)]">
+                        Applied when users open this organization host.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="sm:col-span-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveBrowserBranding()}
+                    disabled={isSavingBrowserBranding}
+                    className="theme-btn-primary inline-flex h-10 items-center rounded-xl px-5 text-sm font-medium disabled:opacity-70"
+                  >
+                    {isSavingBrowserBranding ? "Saving..." : "Save browser branding"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel-strong)] px-4 py-3">
+                  <p className="text-xs font-medium text-[var(--color-muted)]">Tab title</p>
+                  <p className="mt-0.5 text-sm font-semibold text-[var(--color-ink)]">{effectiveTabTitle}</p>
+                </div>
+                <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel-strong)] px-4 py-3">
+                  <p className="text-xs font-medium text-[var(--color-muted)]">Tab icon</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={effectiveTabIcon} alt="Tab icon" className="h-5 w-5 rounded" />
+                    <p className="truncate text-sm text-[var(--color-ink)]">{effectiveTabIcon}</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-6 shadow-[var(--shadow-soft)]">

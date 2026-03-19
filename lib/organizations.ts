@@ -4,6 +4,8 @@ import {
   isTableConflictError,
   isTableNotFoundError,
 } from "./azure-tables";
+import { buildPageInfo, type PageInfo } from "./pagination";
+import type { CompanySize, ExpectedUsers } from "./org-registration";
 
 const ORGANIZATION_SCOPE = "system:organizations";
 const ORGANIZATION_TYPE = "organization";
@@ -21,6 +23,8 @@ type OrganizationEntity = {
   name: string;
   rootOwnerEmail?: string;
   logoUrl?: string;
+  companySize?: string;
+  expectedUsers?: string;
   websiteUrl?: string;
   contactEmail?: string;
   contactPhone?: string;
@@ -58,6 +62,8 @@ export type OrganizationRecord = {
   name: string;
   rootOwnerEmail: string;
   logoUrl: string | null;
+  companySize: string | null;
+  expectedUsers: string | null;
   websiteUrl: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
@@ -68,6 +74,11 @@ export type OrganizationRecord = {
   createdBy: string;
   updatedAt: string;
   updatedBy: string;
+};
+
+export type OrganizationRecordPage = {
+  items: OrganizationRecord[];
+  pageInfo: PageInfo;
 };
 
 export type OrganizationMembership = {
@@ -193,6 +204,8 @@ const toOrganizationRecord = (entity: OrganizationEntity): OrganizationRecord =>
     return isEmailLike(candidate) ? candidate : "";
   })(),
   logoUrl: entity.logoUrl?.trim() ? entity.logoUrl.trim() : null,
+  companySize: entity.companySize?.trim() ? entity.companySize.trim() : null,
+  expectedUsers: entity.expectedUsers?.trim() ? entity.expectedUsers.trim() : null,
   websiteUrl: entity.websiteUrl?.trim() ? entity.websiteUrl.trim() : null,
   contactEmail: entity.contactEmail?.trim() ? entity.contactEmail.trim().toLowerCase() : null,
   contactPhone: entity.contactPhone?.trim() ? entity.contactPhone.trim() : null,
@@ -390,6 +403,35 @@ export const listOrganizations = async (): Promise<OrganizationRecord[]> => {
   return items.sort((left, right) => left.name.localeCompare(right.name));
 };
 
+export const listOrganizationsPage = async (
+  limit: number,
+  cursor?: string,
+): Promise<OrganizationRecordPage> => {
+  const tableClient = await getAppTableClient();
+  const pages = tableClient.listEntities<OrganizationEntity>({
+    queryOptions: {
+      filter: `PartitionKey eq '${ORGANIZATION_SCOPE}' and type eq '${ORGANIZATION_TYPE}'`,
+    },
+  }).byPage({
+    continuationToken: cursor || undefined,
+    maxPageSize: limit,
+  });
+
+  for await (const page of pages) {
+    const items = [...page].map((entity) => toOrganizationRecord(entity));
+
+    return {
+      items,
+      pageInfo: buildPageInfo(limit, page.continuationToken),
+    };
+  }
+
+  return {
+    items: [],
+    pageInfo: buildPageInfo(limit),
+  };
+};
+
 export const listOrganizationsForMemberEmail = async (
   email: string,
 ): Promise<UserOrganizationAccess[]> => {
@@ -449,11 +491,15 @@ export const createOrganization = async ({
   slug,
   name,
   ownerEmail,
+  companySize,
+  expectedUsers,
   createdBy,
 }: {
   slug: string;
   name: string;
   ownerEmail: string;
+  companySize?: CompanySize | null;
+  expectedUsers?: ExpectedUsers | null;
   createdBy: string;
 }) => {
   const normalizedSlug = normalizeSlug(slug);
@@ -490,6 +536,8 @@ export const createOrganization = async ({
     name: normalizedName,
     rootOwnerEmail: normalizedOwnerEmail,
     logoUrl: "",
+    companySize: typeof companySize === "string" ? companySize.trim() : "",
+    expectedUsers: typeof expectedUsers === "string" ? expectedUsers.trim() : "",
     websiteUrl: "",
     contactEmail: "",
     contactPhone: "",
@@ -528,6 +576,51 @@ export const createOrganization = async ({
     organization: toOrganizationRecord(organizationEntity),
     owner: await getOrganizationMembershipByEmail(id, normalizedOwnerEmail),
   };
+};
+
+export const removeOrganization = async ({
+  slug,
+  removedBy,
+}: {
+  slug: string;
+  removedBy: string;
+}) => {
+  const existing = await getOrganizationEntityBySlug(slug);
+
+  if (!existing) {
+    throw new Error("Organization not found.");
+  }
+
+  const normalizedRemovedBy = normalizeEmail(removedBy);
+
+  if (!normalizedRemovedBy) {
+    throw new Error("removedBy is required.");
+  }
+
+  const tableClient = await getAppTableClient();
+  const membershipEntities = tableClient.listEntities<OrganizationMembershipEntity>({
+    queryOptions: {
+      filter: `PartitionKey eq '${toMembershipPartitionKey(existing.id)}' and type eq '${ORGANIZATION_MEMBERSHIP_TYPE}'`,
+    },
+  });
+
+  for await (const entity of membershipEntities) {
+    try {
+      await tableClient.deleteEntity(entity.partitionKey, entity.rowKey);
+    } catch (error) {
+      if (!isTableNotFoundError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  await tableClient.deleteEntity(ORGANIZATION_SCOPE, existing.rowKey);
+
+  return toOrganizationRecord({
+    ...existing,
+    updatedAt: Date.now(),
+    updatedBy: normalizedRemovedBy,
+  });
 };
 
 export const updateOrganizationStatus = async ({

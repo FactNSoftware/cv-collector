@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { createPortal } from "react-dom";
+
 type ConfirmDialogProps = {
   isOpen: boolean;
   title: string;
@@ -27,7 +30,32 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+
+    document.body.style.overflow = "hidden";
+
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
+    };
+  });
+
   if (!isOpen) {
+    return null;
+  }
+
+  if (typeof document === "undefined") {
     return null;
   }
 
@@ -37,39 +65,42 @@ export function ConfirmDialog({
       ? "border-amber-300 bg-amber-500 text-white"
       : "border-[var(--color-sidebar-accent)] bg-[var(--color-sidebar-accent)] text-[var(--color-sidebar-accent-ink)]";
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-dialog-overlay)] px-4 py-6">
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="w-full max-w-lg rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-6 shadow-[var(--shadow-soft)]"
-      >
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--color-brand-strong)]">
-          Confirmation Required
-        </p>
-        <h3 className="mt-2 text-2xl font-semibold text-[var(--color-ink)]">{title}</h3>
-        <p className="mt-3 text-sm leading-6 text-[var(--color-muted)]">{message}</p>
-        {children ? <div className="mt-4">{children}</div> : null}
+  return createPortal(
+    <div className="fixed inset-0 z-50 bg-[var(--color-dialog-overlay)]">
+      <div className="flex h-dvh w-screen items-center justify-center overflow-y-auto px-4 py-6">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="w-full max-w-lg rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-6 shadow-[var(--shadow-soft)]"
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--color-brand-strong)]">
+            Confirmation Required
+          </p>
+          <h3 className="mt-2 text-2xl font-semibold text-[var(--color-ink)]">{title}</h3>
+          <p className="mt-3 text-sm leading-6 text-[var(--color-muted)]">{message}</p>
+          {children ? <div className="mt-4">{children}</div> : null}
 
-        <div className="mt-6 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => void onConfirm()}
-            disabled={isLoading}
-            className={`theme-action-button rounded-2xl border px-4 py-2 disabled:opacity-70 ${confirmClassName}`}
-          >
-            {isLoading ? loadingLabel : confirmLabel}
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={isLoading}
-            className="theme-action-button theme-action-button-secondary rounded-2xl px-4 py-2 disabled:opacity-70"
-          >
-            {cancelLabel}
-          </button>
+          <div className="mt-6 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void onConfirm()}
+              disabled={isLoading}
+              className={`theme-action-button rounded-2xl border px-4 py-2 disabled:opacity-70 ${confirmClassName}`}
+            >
+              {isLoading ? loadingLabel : confirmLabel}
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={isLoading}
+              className="theme-action-button theme-action-button-secondary rounded-2xl px-4 py-2 disabled:opacity-70"
+            >
+              {cancelLabel}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

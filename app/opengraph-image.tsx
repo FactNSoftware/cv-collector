@@ -85,7 +85,7 @@ export default function OpenGraphImage() {
                 fontWeight: 800,
               }}
             >
-              F
+              T
             </div>
             <div
               style={{
@@ -102,7 +102,7 @@ export default function OpenGraphImage() {
                   color: "rgba(246,251,242,0.74)",
                 }}
               >
-                FactN Software
+                Hiring Software
               </div>
               <div
                 style={{
@@ -110,7 +110,7 @@ export default function OpenGraphImage() {
                   fontWeight: 700,
                 }}
               >
-                Recruitment Portal
+                Talent Workspace
               </div>
             </div>
           </div>
@@ -132,7 +132,7 @@ export default function OpenGraphImage() {
                 letterSpacing: "-0.04em",
               }}
             >
-              Apply online and track every step.
+              Hire with clarity and speed.
             </div>
             <div
               style={{
@@ -143,7 +143,7 @@ export default function OpenGraphImage() {
                 maxWidth: 920,
               }}
             >
-              Browse current openings, manage your profile, and follow your application progress from one secure workspace.
+              Manage jobs, applications, reviews, and hiring collaboration from one modern recruiting workspace.
             </div>
           </div>
 
@@ -162,7 +162,7 @@ export default function OpenGraphImage() {
                 flexWrap: "wrap",
               }}
             >
-              {["OTP login", "Job applications", "CV review"].map((item) => (
+              {["Jobs", "Applications", "Hiring reviews"].map((item) => (
                 <div
                   key={item}
                   style={{
@@ -188,7 +188,7 @@ export default function OpenGraphImage() {
                 color: "#a5eb2e",
               }}
             >
-              recruitment.factnsoftware.com
+              talent workspace
             </div>
           </div>
         </div>

@@ -10,6 +10,7 @@ export type CandidateProfile = {
   lastName: string;
   phone: string;
   idOrPassportNumber: string;
+  createdAt: string | null;
   updatedAt: string | null;
 };
 
@@ -47,6 +48,9 @@ const toProfile = (entity: CandidateProfileEntity): CandidateProfile => ({
   lastName: entity.lastName ?? "",
   phone: entity.phone ?? "",
   idOrPassportNumber: entity.idOrPassportNumber ?? "",
+  createdAt: Number.isFinite(entity.createdAt) && entity.createdAt > 0
+    ? new Date(entity.createdAt).toISOString()
+    : null,
   updatedAt: Number.isFinite(entity.updatedAt) && entity.updatedAt > 0
     ? new Date(entity.updatedAt).toISOString()
     : null,
@@ -118,6 +122,7 @@ export const ensureCandidateProfile = async (email: string) => {
     lastName: "",
     phone: "",
     idOrPassportNumber: "",
+    createdAt: new Date(now).toISOString(),
     updatedAt: new Date(now).toISOString(),
   } satisfies CandidateProfile;
 };
@@ -144,7 +149,7 @@ export const upsertCandidateProfile = async (
     lastName: input.lastName?.trim() ?? current?.lastName ?? "",
     phone: input.phone?.trim() ?? current?.phone ?? "",
     idOrPassportNumber: input.idOrPassportNumber?.trim() ?? current?.idOrPassportNumber ?? "",
-    createdAt: current?.updatedAt ? Date.parse(current.updatedAt) || now : now,
+    createdAt: current?.createdAt ? Date.parse(current.createdAt) || now : now,
     updatedAt: now,
   };
 

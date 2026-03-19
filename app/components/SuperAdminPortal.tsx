@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronLeft } from "lucide-react";
 import type {
   OrganizationMembership,
   OrganizationRecord,
@@ -17,6 +19,8 @@ import { useToast } from "./ToastProvider";
 type SuperAdminPortalProps = {
   sessionEmail: string;
   initialOrganizations: OrganizationRecord[];
+  selectedSlug?: string;
+  backHref?: string;
 };
 
 const DEFAULT_THEME: TenantTheme = {
@@ -71,12 +75,15 @@ const sortOrganizations = (items: OrganizationRecord[]) => {
 export function SuperAdminPortal({
   sessionEmail,
   initialOrganizations,
+  selectedSlug: initialSelectedSlug,
+  backHref,
 }: SuperAdminPortalProps) {
   const { showToast } = useToast();
+  const isDetailView = !!backHref;
 
   const [organizations, setOrganizations] = useState(() => sortOrganizations(initialOrganizations));
   const [selectedSlug, setSelectedSlug] = useState<string | null>(
-    initialOrganizations[0]?.slug ?? null,
+    initialSelectedSlug ?? initialOrganizations[0]?.slug ?? null,
   );
 
   const [isCreatingOrganization, setIsCreatingOrganization] = useState(false);
@@ -379,11 +386,23 @@ export function SuperAdminPortal({
       portal="system"
       sessionEmail={sessionEmail}
       eyebrow="System"
-      title="Tenant organizations"
-      subtitle="Create organizations, assign members, and configure custom domain + full theme tokens per tenant."
+      title={isDetailView ? selectedOrganization?.name : "Organizations"}
+      subtitle={isDetailView ? "Manage organization settings and members" : "Create organizations, assign members, and configure custom domain + full theme tokens per tenant."}
     >
-      <div className="grid gap-4 xl:grid-cols-[340px_1fr]">
-        <section className="space-y-4">
+      {isDetailView && backHref && (
+        <div className="mb-6">
+          <Link
+            href={backHref}
+            className="inline-flex items-center gap-2 text-sm text-[var(--color-brand)] hover:underline"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Back to organizations
+          </Link>
+        </div>
+      )}
+      <div className={isDetailView ? "space-y-4" : "grid gap-4 xl:grid-cols-[340px_1fr]"}>
+        {!isDetailView && (
+          <section className="space-y-4">
           <article className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-5 shadow-[var(--shadow-soft)]">
             <h2 className="text-lg font-semibold text-[var(--color-ink)]">Create organization</h2>
             <p className="mt-2 text-sm text-[var(--color-muted)]">
@@ -455,8 +474,9 @@ export function SuperAdminPortal({
             </div>
           </article>
         </section>
+        )}
 
-        <section className="space-y-4">
+        <section className={isDetailView ? "space-y-4 max-w-4xl" : "space-y-4"}>
           {selectedOrganization ? (
             <>
               <article className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-6 shadow-[var(--shadow-soft)]">

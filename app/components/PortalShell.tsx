@@ -76,7 +76,9 @@ const CANDIDATE_NAV: NavItem[] = [
 ];
 
 const SYSTEM_NAV: NavItem[] = [
-  { href: "/system", label: "Organizations", icon: Building2 },
+  { href: "/system", label: "Dashboard", icon: LayoutGrid },
+  { href: "/system/organizations", label: "Organizations", icon: Building2, matchPrefix: "/system/organizations" },
+  { href: "/system/users", label: "Super Admins", icon: ShieldCheck, matchPrefix: "/system/users" },
 ];
 
 const buildTenantNav = (slug: string): NavItem[] => [
@@ -162,10 +164,22 @@ const getBreadcrumbs = (
   }
   if (portal === "system") {
     if (pathname === "/system") {
-      return [{ label: "Organizations" }];
+      return [{ label: "Dashboard" }];
     }
-
-    return [{ href: "/system", label: "Organizations" }, { label: title }];
+    if (pathname === "/system/organizations") {
+      return [{ href: "/system", label: "Dashboard" }, { label: "Organizations" }];
+    }
+    if (pathname.startsWith("/system/organizations/")) {
+      return [
+        { href: "/system", label: "Dashboard" },
+        { href: "/system/organizations", label: "Organizations" },
+        { label: title },
+      ];
+    }
+    if (pathname === "/system/users") {
+      return [{ href: "/system", label: "Dashboard" }, { label: "Super Admins" }];
+    }
+    return [{ href: "/system", label: "Dashboard" }, { label: title }];
   }
 
   if (portal === "admin") {
@@ -301,6 +315,7 @@ export function PortalShell({
   const storageKey = `chat-nav-state:${portal}:${sessionEmail.trim().toLowerCase()}`;
   const [tenantOrganizations, setTenantOrganizations] = useState<TenantOrganizationOption[]>([]);
   const [isLoadingTenantOrganizations, setIsLoadingTenantOrganizations] = useState(false);
+  const [cachedOrgName, setCachedOrgName] = useState<string | null>(null);
   const chatNavSnapshot = useSyncExternalStore(
     (onStoreChange) => {
       if (typeof window === "undefined") {
@@ -379,14 +394,10 @@ export function PortalShell({
     }
 
     if (organizationSlug && !seenSlugs.has(organizationSlug)) {
-      const cachedName =
-        (typeof window !== "undefined" &&
-          localStorage.getItem(`org-name:${organizationSlug}`)) ||
-        organizationSlug;
       items.unshift({
         id: organizationSlug,
         slug: organizationSlug,
-        name: cachedName,
+        name: cachedOrgName ?? organizationSlug,
         role: "admin",
         isRootOwner: false,
         logoUrl: null,
@@ -394,7 +405,7 @@ export function PortalShell({
     }
 
     return items;
-  }, [organizationSlug, portal, tenantOrganizations]);
+  }, [cachedOrgName, organizationSlug, portal, tenantOrganizations]);
 
   const handleTenantOrganizationChange = (nextSlug: string) => {
     if (portal !== "tenant" || !nextSlug || !organizationSlug || nextSlug === organizationSlug) {
@@ -499,6 +510,12 @@ export function PortalShell({
       document.removeEventListener("visibilitychange", visibilityHandler);
     };
   }, [pathname, portal, storageKey]);
+
+  useEffect(() => {
+    if (portal === "tenant" && organizationSlug) {
+      setCachedOrgName(localStorage.getItem(`org-name:${organizationSlug}`));
+    }
+  }, [organizationSlug, portal]);
 
   useEffect(() => {
     if (portal !== "tenant") {

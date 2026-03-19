@@ -14,6 +14,8 @@ export const runtime = "nodejs";
 type UpdateSettingsPayload = {
   customDomain?: string | null;
   theme?: Partial<Record<keyof TenantTheme, string>>;
+  tabTitle?: string;
+  tabIconUrl?: string | null;
   emailDomain?: string | null;
   emailSenderName?: string;
 };
@@ -59,6 +61,14 @@ export async function PATCH(
       ? body.emailDomain
       : undefined;
 
+    const tabTitle = typeof body.tabTitle === "string"
+      ? body.tabTitle
+      : undefined;
+
+    const tabIconUrl = Object.prototype.hasOwnProperty.call(body, "tabIconUrl")
+      ? body.tabIconUrl
+      : undefined;
+
     const emailSenderName = typeof body.emailSenderName === "string"
       ? body.emailSenderName
       : undefined;
@@ -67,6 +77,8 @@ export async function PATCH(
       slug,
       customDomain,
       theme,
+      tabTitle,
+      tabIconUrl,
       emailDomain,
       emailSenderName,
       updatedBy: auth.session.email,

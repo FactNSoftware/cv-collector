@@ -40,6 +40,9 @@ param emailSenderAddress string = ''
 @description('Deploy the Container App now. Keep this false until the final image and verified sender address are ready.')
 param deployContainerApp bool = false
 
+@description('Create a Container Apps environment as part of this deployment.')
+param deployContainerAppEnvironment bool = true
+
 @description('Data residency region for Azure Communication Services Email and Communication Services.')
 param communicationDataLocation string
 
@@ -118,7 +121,7 @@ resource workspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   }
 }
 
-resource containerAppEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
+resource containerAppEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = if (deployContainerAppEnvironment) {
   name: containerAppEnvironmentName
   location: location
   tags: union(tags, {
@@ -183,7 +186,7 @@ resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-
   }
 }
 
-resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployContainerApp) {
+resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployContainerApp && deployContainerAppEnvironment) {
   name: containerAppName
   location: location
   identity: {
@@ -280,7 +283,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployConta
 
 output storageAccountName string = storageAccount.name
 output registryLoginServer string = registry.properties.loginServer
-output containerAppName string = deployContainerApp ? containerApp.name : ''
-output containerAppUrl string = deployContainerApp ? 'https://${containerApp!.properties.configuration.ingress.fqdn}' : ''
+output containerAppName string = (deployContainerApp && deployContainerAppEnvironment) ? containerApp.name : ''
+output containerAppUrl string = (deployContainerApp && deployContainerAppEnvironment) ? 'https://${containerApp!.properties.configuration.ingress.fqdn}' : ''
 output emailServiceName string = emailService.name
 output communicationServiceName string = communicationService.name

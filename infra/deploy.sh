@@ -756,7 +756,13 @@ else
   DEPLOYMENT_TO_USE="${APP_NAME}-$(date +%Y%m%d%H%M%S)"
   log_info "Deployment name: $DEPLOYMENT_TO_USE"
 
-  if [[ "$CREATE_RG" == "true" ]]; then
+  RG_EXISTS="$(az group exists --name "$RESOURCE_GROUP_NAME" -o tsv 2>/dev/null || echo "false")"
+
+  if [[ "$RG_EXISTS" != "true" ]]; then
+    log_info "Resource group not found. Creating before deployment: $RESOURCE_GROUP_NAME"
+    az group create --name "$RESOURCE_GROUP_NAME" --location "$LOCATION" >/dev/null
+    log_success "Resource group created: $RESOURCE_GROUP_NAME"
+  elif [[ "$CREATE_RG" == "true" ]]; then
     log_info "Ensuring resource group exists before deployment: $RESOURCE_GROUP_NAME"
     az group create --name "$RESOURCE_GROUP_NAME" --location "$LOCATION" >/dev/null
     log_success "Resource group ready: $RESOURCE_GROUP_NAME"

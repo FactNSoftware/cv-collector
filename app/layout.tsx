@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { getAppBaseUrl } from "../lib/app-url";
 import {
+  getTenantMetadata,
   resolveTenantBrandingFromHost,
   toTenantCssVariables,
 } from "../lib/organization-branding";
@@ -13,38 +14,45 @@ const appBaseUrl = getAppBaseUrl();
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  metadataBase: new URL(appBaseUrl),
-  title: "FactN Recruitment Portal",
-  description: "Apply for open roles at FactN, manage your candidate profile, and track your applications in one place.",
-  applicationName: "FactN Recruitment Portal",
-  icons: {
-    icon: "/icon.svg",
-    shortcut: "/icon.svg",
-    apple: "/icon.svg",
-  },
-  openGraph: {
-    type: "website",
-    url: appBaseUrl,
-    siteName: "FactN Recruitment Portal",
-    title: "FactN Recruitment Portal",
-    description: "Apply for open roles at FactN, manage your candidate profile, and track your applications in one place.",
-    images: [
-      {
-        url: "/opengraph-image",
-        width: 1200,
-        height: 630,
-        alt: "FactN Recruitment Portal",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "FactN Recruitment Portal",
-    description: "Apply for open roles at FactN, manage your candidate profile, and track your applications in one place.",
-    images: ["/opengraph-image"],
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  const tenantBranding = await resolveTenantBrandingFromHost(host);
+  const tenantMetadata = getTenantMetadata(tenantBranding.organization, tenantBranding.settings);
+
+  return {
+    metadataBase: new URL(appBaseUrl),
+    title: tenantMetadata.title,
+    description: tenantMetadata.description,
+    applicationName: tenantMetadata.applicationName,
+    icons: {
+      icon: tenantMetadata.iconUrl,
+      shortcut: tenantMetadata.iconUrl,
+      apple: tenantMetadata.iconUrl,
+    },
+    openGraph: {
+      type: "website",
+      url: appBaseUrl,
+      siteName: tenantMetadata.applicationName,
+      title: tenantMetadata.title,
+      description: tenantMetadata.description,
+      images: [
+        {
+          url: "/opengraph-image",
+          width: 1200,
+          height: 630,
+          alt: tenantMetadata.title,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: tenantMetadata.title,
+      description: tenantMetadata.description,
+      images: ["/opengraph-image"],
+    },
+  };
+}
 
 export default async function RootLayout({
   children,

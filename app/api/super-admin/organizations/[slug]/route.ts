@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { recordAdminAuditEvent } from "../../../../../lib/audit-log";
 import {
   getOrganizationBySlug,
+  removeOrganization,
   updateOrganizationStatus,
   type OrganizationStatus,
 } from "../../../../../lib/organizations";
 import { requireSuperAdminApiSession } from "../../../../../lib/auth-guards";
+import { removeOrganizationBrandingSettingsByOrganizationId } from "../../../../../lib/organization-branding";
 
 export const runtime = "nodejs";
 
@@ -89,5 +91,61 @@ export async function PATCH(
     }
 
     return NextResponse.json({ message: "Failed to update organization status." }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ slug: string }> },
+) {
+  const auth = await requireSuperAdminApiSession(request);
+
+  if ("response" in auth) {
+    return auth.response;
+  }
+
+  try {
+    const { slug } = await context.params;
+    const organization = await getOrganizationBySlug(slug);
+
+    if (!organization) {
+      return NextResponse.json({ message: "Organization not found." }, { status: 404 });
+    }
+
+    await removeOrganizationBrandingSettingsByOrganizationId(organization.id);
+    const removed = await removeOrganization({
+      slug,
+      removedBy: auth.session.email,
+    });
+
+    await recordAdminAuditEvent({
+      actorEmail: auth.session.email,
+      action: "organization.delete",
+      targetType: "organization",
+      targetId: removed.id,
+      summary: `Deleted organization ${removed.slug}`,
+      requestMethod: request.method,
+      requestPath: new URL(request.url).pathname,
+      userAgent: request.headers.get("user-agent") ?? "",
+      details: {
+        organizationId: removed.id,
+        organizationSlug: removed.slug,
+        organizationName: removed.name,
+      },
+    });
+
+    return NextResponse.json({
+      message: "Organization deleted successfully.",
+      item: removed,
+    });
+  } catch (error) {
+    console.error("Failed to delete organization", error);
+
+    if (error instanceof Error) {
+      const status = error.message === "Organization not found." ? 404 : 400;
+      return NextResponse.json({ message: error.message }, { status });
+    }
+
+    return NextResponse.json({ message: "Failed to delete organization." }, { status: 500 });
   }
 }

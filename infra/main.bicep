@@ -22,6 +22,9 @@ param emailSenderAddress string = ''
 @description('Deploy the Container App now. Keep this false until the final image and verified sender address are ready.')
 param deployContainerApp bool = false
 
+@description('Create a Container Apps environment as part of this deployment.')
+param deployContainerAppEnvironment bool = true
+
 @description('Data residency region for Azure Communication Services Email and Communication Services.')
 param communicationDataLocation string = 'India'
 
@@ -66,6 +69,7 @@ module appStack './modules/app-stack.bicep' = {
     authSecret: authSecret
     emailSenderAddress: emailSenderAddress
     deployContainerApp: deployContainerApp
+    deployContainerAppEnvironment: deployContainerAppEnvironment
     communicationDataLocation: communicationDataLocation
     createManagedEmailDomain: createManagedEmailDomain
     tags: tags

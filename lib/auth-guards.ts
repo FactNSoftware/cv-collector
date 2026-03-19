@@ -182,7 +182,7 @@ export const requireSuperAdminPageSession = async (): Promise<AuthSession> => {
   const isSuperAdmin = await isSuperAdminEmail(session.email);
 
   if (!isSuperAdmin) {
-    redirect("/apply");
+    redirect("/");
   }
 
   return session;
@@ -215,7 +215,7 @@ export const requireOrganizationAccessApiSession = async (
     };
   }
 
-  if (organization.status !== "active") {
+  if (organization.status !== "active" && !isSuperAdmin) {
     return {
       response: NextResponse.json(
         { message: UNAUTHORIZED_MESSAGE },

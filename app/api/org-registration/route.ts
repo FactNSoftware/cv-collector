@@ -10,7 +10,6 @@ export const runtime = "nodejs";
 
 type RegistrationPayload = {
   orgName?: string;
-  ownerName?: string;
   ownerEmail?: string;
   companySize?: string;
   expectedUsers?: string;
@@ -21,14 +20,12 @@ export async function POST(request: Request) {
     const body = (await request.json()) as RegistrationPayload;
 
     const orgName = typeof body.orgName === "string" ? body.orgName : "";
-    const ownerName = typeof body.ownerName === "string" ? body.ownerName : "";
     const ownerEmail = typeof body.ownerEmail === "string" ? body.ownerEmail : "";
     const companySize = typeof body.companySize === "string" ? body.companySize : "";
     const expectedUsers = typeof body.expectedUsers === "string" ? body.expectedUsers : "";
 
     const result = await startOrgRegistration({
       orgName,
-      ownerName,
       ownerEmail,
       companySize: companySize as CompanySize,
       expectedUsers: expectedUsers as ExpectedUsers,

@@ -88,7 +88,7 @@ const parseTenantPath = (pathname: string) => {
   return { slug, remainder };
 };
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   if (!BASE_HOST) {
     return NextResponse.next();
   }

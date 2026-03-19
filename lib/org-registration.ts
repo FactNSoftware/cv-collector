@@ -1,10 +1,16 @@
 import { createHash } from "crypto";
 import { getAppTableClient, isTableNotFoundError } from "./azure-tables";
-import { createOrganization, getOrganizationBySlug, isOrganizationSlugValid } from "./organizations";
+import {
+  createOrganization,
+  getOrganizationBySlug,
+  isOrganizationSlugValid,
+  listOrganizationsForMemberEmail,
+} from "./organizations";
 
 const SCOPE = "org-registrations";
 const ENTITY_TYPE = "pending-org-registration";
 const OTP_MAX_ATTEMPTS = 5;
+const MAX_SELF_REGISTERED_ORGANIZATIONS_PER_EMAIL = 3;
 
 export const COMPANY_SIZES = [
   "1-10",
@@ -27,7 +33,6 @@ export type ExpectedUsers = (typeof EXPECTED_USERS)[number];
 
 export type OrgRegistrationInput = {
   orgName: string;
-  ownerName: string;
   ownerEmail: string;
   companySize: CompanySize;
   expectedUsers: ExpectedUsers;
@@ -38,7 +43,6 @@ type PendingOrgEntity = {
   rowKey: string;
   type: string;
   orgName: string;
-  ownerName: string;
   ownerEmail: string;
   companySize: string;
   expectedUsers: string;
@@ -119,6 +123,17 @@ const generateUniqueSlug = async (orgName: string): Promise<string> => {
   );
 };
 
+const ensureRegistrationLimitForOwnerEmail = async (ownerEmail: string) => {
+  const accessList = await listOrganizationsForMemberEmail(ownerEmail);
+  const ownedOrganizationCount = accessList.filter((item) => item.role === "owner" || item.isRootOwner).length;
+
+  if (ownedOrganizationCount >= MAX_SELF_REGISTERED_ORGANIZATIONS_PER_EMAIL) {
+    throw new OrgRegistrationError(
+      `This email can register up to ${MAX_SELF_REGISTERED_ORGANIZATIONS_PER_EMAIL} organizations only.`,
+    );
+  }
+};
+
 /**
  * Starts organization registration by creating the tenant directly.
  * Returns the generated slug so the frontend can redirect to tenant login.
@@ -128,7 +143,6 @@ export const startOrgRegistration = async (
 ): Promise<{ slug: string }> => {
   const ownerEmail = normalizeEmail(input.ownerEmail);
   const orgName = input.orgName.trim();
-  const ownerName = input.ownerName.trim();
 
   if (!isValidEmail(ownerEmail)) {
     throw new OrgRegistrationError("Enter a valid email address.");
@@ -136,10 +150,6 @@ export const startOrgRegistration = async (
 
   if (!orgName || orgName.length < 2) {
     throw new OrgRegistrationError("Organization name must be at least 2 characters.");
-  }
-
-  if (!ownerName || ownerName.length < 2) {
-    throw new OrgRegistrationError("Owner name must be at least 2 characters.");
   }
 
   if (!COMPANY_SIZES.includes(input.companySize as CompanySize)) {
@@ -150,12 +160,16 @@ export const startOrgRegistration = async (
     throw new OrgRegistrationError("Select a valid expected hiring volume.");
   }
 
+  await ensureRegistrationLimitForOwnerEmail(ownerEmail);
+
   const slug = await generateUniqueSlug(orgName);
 
   await createOrganization({
     slug,
     name: orgName,
     ownerEmail,
+    companySize: input.companySize,
+    expectedUsers: input.expectedUsers,
     createdBy: "registration",
   });
 
@@ -222,6 +236,8 @@ export const verifyOrgRegistration = async (
   }
 
   // Activate: create org + add owner
+  await ensureRegistrationLimitForOwnerEmail(email);
+
   await createOrganization({
     slug: record.slug,
     name: record.orgName,

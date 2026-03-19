@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { ClipboardEvent, FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Building2 } from "lucide-react";
 import { LoadingOverlay } from "./LoadingOverlay";
 import { useToast } from "./ToastProvider";
 
@@ -213,13 +214,9 @@ export function TenantLoginForm({
                   className="h-auto max-h-14 w-auto max-w-[220px] rounded object-contain"
                 />
               ) : (
-                <Image
-                  src="/logo.webp"
-                  width={184}
-                  height={56}
-                  className="h-auto w-46"
-                  alt="Company logo"
-                />
+                <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel-strong)] text-[var(--color-brand-strong)]">
+                  <Building2 className="h-7 w-7" />
+                </div>
               )}
             </div>
 

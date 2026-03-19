@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { recordAdminAuditEvent } from "../../../../lib/audit-log";
 import {
   createOrganization,
-  listOrganizations,
+  listOrganizationsPage,
 } from "../../../../lib/organizations";
 import { requireSuperAdminApiSession } from "../../../../lib/auth-guards";
 import { ensureCandidateProfile } from "../../../../lib/candidate-profile";
+import { getCursorParam, getPageLimit } from "../../../../lib/pagination";
 
 export const runtime = "nodejs";
 
@@ -22,8 +23,12 @@ export async function GET(request: Request) {
     return auth.response;
   }
 
-  const items = await listOrganizations();
-  return NextResponse.json({ items });
+  const url = new URL(request.url);
+  const limit = getPageLimit(url.searchParams.get("limit"));
+  const cursor = getCursorParam(url.searchParams.get("cursor"));
+  const page = await listOrganizationsPage(limit, cursor);
+
+  return NextResponse.json(page);
 }
 
 export async function POST(request: Request) {

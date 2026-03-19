@@ -1,10 +1,8 @@
 "use client";
 
 import {
-  type CSSProperties,
   createContext,
   type ReactNode,
-  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -13,7 +11,6 @@ import {
   useState,
 } from "react";
 import { usePathname } from "next/navigation";
-import { LoadingOverlay } from "./LoadingOverlay";
 
 type NavigationLoadingContextValue = {
   showLoading: (title?: string, message?: string) => void;
@@ -21,48 +18,6 @@ type NavigationLoadingContextValue = {
 };
 
 const NavigationLoadingContext = createContext<NavigationLoadingContextValue | null>(null);
-
-const OVERLAY_THEME_VARIABLES = [
-  "--color-overlay",
-  "--color-border-strong",
-  "--shadow-soft",
-  "--color-sidebar-accent",
-  "--color-sidebar-accent-ink",
-  "--color-ink",
-  "--color-muted",
-  "--color-panel",
-] as const;
-
-type OverlayThemeStyle = CSSProperties & Record<(typeof OVERLAY_THEME_VARIABLES)[number], string>;
-
-const collectOverlayThemeStyle = (): OverlayThemeStyle | undefined => {
-  if (typeof window === "undefined") {
-    return undefined;
-  }
-
-  const scope = document.querySelector<HTMLElement>("[data-tenant-theme]");
-
-  if (!scope) {
-    return undefined;
-  }
-
-  const computed = window.getComputedStyle(scope);
-  const style = {} as OverlayThemeStyle;
-  let hasValue = false;
-
-  for (const variableName of OVERLAY_THEME_VARIABLES) {
-    const variableValue = computed.getPropertyValue(variableName).trim();
-
-    if (!variableValue) {
-      continue;
-    }
-
-    style[variableName] = variableValue;
-    hasValue = true;
-  }
-
-  return hasValue ? style : undefined;
-};
 
 export function useNavigationLoading() {
   const value = useContext(NavigationLoadingContext);
@@ -80,23 +35,10 @@ export function NavigationLoadingProvider({
   children: ReactNode;
 }) {
   const pathname = usePathname();
-  const [loadingState, setLoadingState] = useState<{
-    visible: boolean;
-    title: string;
-    message: string;
-  }>({
-    visible: false,
-    title: "Loading",
-    message: "Preparing the next screen.",
-  });
-  const [overlayThemeStyle, setOverlayThemeStyle] = useState<OverlayThemeStyle | undefined>(
-    undefined,
-  );
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [barVisible, setBarVisible] = useState(false);
   const timeoutRef = useRef<number | null>(null);
-
-  const syncOverlayThemeStyle = useCallback(() => {
-    setOverlayThemeStyle(collectOverlayThemeStyle());
-  }, []);
+  const settleTimeoutRef = useRef<number | null>(null);
 
   const hideLoading = useCallback(() => {
     if (timeoutRef.current) {
@@ -104,35 +46,40 @@ export function NavigationLoadingProvider({
       timeoutRef.current = null;
     }
 
-    setLoadingState((current) => ({ ...current, visible: false }));
+    if (settleTimeoutRef.current) {
+      window.clearTimeout(settleTimeoutRef.current);
+      settleTimeoutRef.current = null;
+    }
+
+    settleTimeoutRef.current = window.setTimeout(() => {
+      setIsNavigating(false);
+      setBarVisible(false);
+      settleTimeoutRef.current = null;
+    }, 220);
   }, []);
 
-  const showLoading = useCallback((
-    title = "Loading",
-    message = "Preparing the next screen.",
-  ) => {
+  const showLoading: NavigationLoadingContextValue["showLoading"] = useCallback(() => {
     if (timeoutRef.current) {
       window.clearTimeout(timeoutRef.current);
     }
 
-    syncOverlayThemeStyle();
+    if (settleTimeoutRef.current) {
+      window.clearTimeout(settleTimeoutRef.current);
+      settleTimeoutRef.current = null;
+    }
 
-    setLoadingState({
-      visible: true,
-      title,
-      message,
-    });
+    setIsNavigating(true);
+    setBarVisible(true);
 
     timeoutRef.current = window.setTimeout(() => {
-      setLoadingState((current) => ({ ...current, visible: false }));
+      setIsNavigating(false);
+      setBarVisible(false);
       timeoutRef.current = null;
-    }, 15000);
-  }, [syncOverlayThemeStyle]);
+    }, 8000);
+  }, []);
 
   useEffect(() => {
-    startTransition(() => {
-      hideLoading();
-    });
+    hideLoading();
   }, [hideLoading, pathname]);
 
   useEffect(() => {
@@ -194,16 +141,57 @@ export function NavigationLoadingProvider({
     hideLoading,
   }), [hideLoading, showLoading]);
 
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        window.clearTimeout(timeoutRef.current);
+      }
+      if (settleTimeoutRef.current) {
+        window.clearTimeout(settleTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
     <NavigationLoadingContext.Provider value={value}>
-      {children}
-      {loadingState.visible && (
-        <LoadingOverlay
-          title={loadingState.title}
-          message={loadingState.message}
-          themeVars={overlayThemeStyle}
-        />
-      )}
+      <div
+        className={`transition-[opacity,transform,filter] duration-200 ease-out ${
+          isNavigating ? "opacity-[0.985] translate-y-[1px] saturate-[0.985]" : "opacity-100 translate-y-0"
+        }`}
+      >
+        {children}
+      </div>
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none fixed inset-x-0 top-0 z-[70] h-20 transition-opacity duration-200 ${
+          barVisible ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <div className="absolute inset-x-0 top-0 h-[3px] overflow-hidden bg-transparent">
+          <div className="route-transition-bar h-full w-full origin-left bg-[linear-gradient(90deg,var(--color-sidebar-accent),var(--color-brand),var(--color-sidebar-accent-ink))]" />
+        </div>
+        <div className="absolute inset-x-0 top-0 h-16 bg-[linear-gradient(180deg,rgba(0,61,24,0.08),transparent)]" />
+      </div>
+      <style jsx>{`
+        .route-transition-bar {
+          animation: route-progress 1s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+        }
+
+        @keyframes route-progress {
+          0% {
+            transform: translateX(-65%) scaleX(0.28);
+            opacity: 0.4;
+          }
+          45% {
+            transform: translateX(-5%) scaleX(0.62);
+            opacity: 0.95;
+          }
+          100% {
+            transform: translateX(55%) scaleX(0.38);
+            opacity: 0.55;
+          }
+        }
+      `}</style>
     </NavigationLoadingContext.Provider>
   );
 }
