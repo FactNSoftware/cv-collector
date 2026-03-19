@@ -46,6 +46,8 @@ var containerAppEnvironmentName = 'cae-${appName}'
 var logAnalyticsName = 'log-${appName}'
 var emailServiceName = 'email-${appName}-${take(nameSuffix, 6)}'
 var communicationServiceName = 'acs-${appName}-${take(nameSuffix, 6)}'
+var serviceBusNamespaceName = take('sb-${compactAppName}-${take(nameSuffix, 6)}', 50)
+var otpEmailQueueName = 'otp-email'
 
 resource resourceGroup 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: resourceGroupName
@@ -65,6 +67,8 @@ module appStack './modules/app-stack.bicep' = {
     containerAppName: containerAppName
     emailServiceName: emailServiceName
     communicationServiceName: communicationServiceName
+    serviceBusNamespaceName: serviceBusNamespaceName
+    otpEmailQueueName: otpEmailQueueName
     containerImage: containerImage
     authSecret: authSecret
     emailSenderAddress: emailSenderAddress
@@ -83,3 +87,5 @@ output containerAppName string = appStack.outputs.containerAppName
 output containerAppUrl string = appStack.outputs.containerAppUrl
 output emailServiceName string = appStack.outputs.emailServiceName
 output communicationServiceName string = appStack.outputs.communicationServiceName
+output serviceBusNamespaceName string = appStack.outputs.serviceBusNamespaceName
+output otpEmailQueueName string = appStack.outputs.otpEmailQueueName

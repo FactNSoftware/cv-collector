@@ -121,7 +121,7 @@ export function PortalDiscoveryForm({ initialVerifiedEmail, hasSession = false }
       setOtp(getDefaultOtp());
       lastSubmittedOtp.current = "";
       setStep("otp");
-      showToast("OTP sent. Check your inbox.");
+      showToast(payload.message || "OTP requested successfully.");
     } catch {
       showToast("Something went wrong while sending OTP.", "error");
     } finally {

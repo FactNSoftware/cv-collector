@@ -27,6 +27,12 @@ param emailServiceName string
 @description('Communication Services resource name.')
 param communicationServiceName string
 
+@description('Service Bus namespace name.')
+param serviceBusNamespaceName string
+
+@description('Service Bus queue name used for OTP email jobs.')
+param otpEmailQueueName string = 'otp-email'
+
 @description('Container image to deploy.')
 param containerImage string = ''
 
@@ -57,6 +63,7 @@ var containerCpu = json('0.25')
 var containerMemory = '0.5Gi'
 var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
 var communicationConnectionString = communicationService.listKeys().primaryConnectionString
+var serviceBusConnectionString = serviceBusAuthorizationRule.listKeys().primaryConnectionString
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageAccountName
@@ -176,6 +183,40 @@ resource communicationService 'Microsoft.Communication/communicationServices@202
   }
 }
 
+resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2024-01-01' = {
+  name: serviceBusNamespaceName
+  location: location
+  sku: {
+    name: 'Standard'
+    tier: 'Standard'
+  }
+  tags: union(tags, {
+    service: 'service-bus'
+  })
+  properties: {
+    publicNetworkAccess: 'Enabled'
+    zoneRedundant: false
+  }
+}
+
+resource serviceBusQueue 'Microsoft.ServiceBus/namespaces/queues@2024-01-01' = {
+  parent: serviceBusNamespace
+  name: otpEmailQueueName
+  properties: {
+    lockDuration: 'PT1M'
+    maxDeliveryCount: 5
+    defaultMessageTimeToLive: 'PT10M'
+    deadLetteringOnMessageExpiration: true
+    requiresDuplicateDetection: false
+    requiresSession: false
+  }
+}
+
+resource serviceBusAuthorizationRule 'Microsoft.ServiceBus/namespaces/authorizationRules@2024-01-01' existing = {
+  parent: serviceBusNamespace
+  name: 'RootManageSharedAccessKey'
+}
+
 resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployContainerApp) {
   name: guid(resourceGroup().id, registry.id, containerRegistryIdentity.id, 'AcrPull')
   scope: registry
@@ -227,6 +268,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployConta
           name: 'communication-connection'
           value: communicationConnectionString
         }
+        {
+          name: 'service-bus-connection'
+          value: serviceBusConnectionString
+        }
       ]
     }
     template: {
@@ -263,6 +308,14 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployConta
               name: 'AUTH_SECRET'
               secretRef: 'auth-secret'
             }
+            {
+              name: 'AZURE_SERVICE_BUS_CONNECTION_STRING'
+              secretRef: 'service-bus-connection'
+            }
+            {
+              name: 'AZURE_SERVICE_BUS_OTP_QUEUE_NAME'
+              value: otpEmailQueueName
+            }
           ]
           resources: {
             cpu: containerCpu
@@ -287,3 +340,5 @@ output containerAppName string = (deployContainerApp && deployContainerAppEnviro
 output containerAppUrl string = (deployContainerApp && deployContainerAppEnvironment) ? 'https://${containerApp!.properties.configuration.ingress.fqdn}' : ''
 output emailServiceName string = emailService.name
 output communicationServiceName string = communicationService.name
+output serviceBusNamespaceName string = serviceBusNamespace.name
+output otpEmailQueueName string = serviceBusQueue.name

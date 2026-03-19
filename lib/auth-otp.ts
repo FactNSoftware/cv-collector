@@ -1,7 +1,8 @@
-import { createHash, randomInt } from "crypto";
+import { createHash, randomInt, randomUUID } from "crypto";
 import { getAppTableClient, isTableNotFoundError } from "./azure-tables";
 import { sendTransactionalEmail } from "./email-service";
 import { buildOtpEmailTemplate } from "./otp-email-template";
+import { isServiceBusConfigured } from "./service-bus";
 
 const AUTH_SECRET_ENV = "AUTH_SECRET";
 const OTP_SCOPE = "auth";
@@ -24,9 +25,14 @@ type OtpEntity = {
   type: string;
   email: string;
   codeHash: string;
+  requestId: string;
   attempts: number;
   createdAt: number;
   expiresAt: number;
+  deliveryStatus?: "pending" | "queued" | "sent" | "failed";
+  deliveryError?: string;
+  queuedAt?: number;
+  sentAt?: number;
   updatedAt?: number;
 };
 
@@ -65,6 +71,69 @@ const sendOtpEmail = async (email: string, otpCode: string) => {
   await sendTransactionalEmail(email, template);
 };
 
+const toOtpEntity = ({
+  email,
+  codeHash,
+  requestId,
+  expiresAt,
+  deliveryStatus,
+}: {
+  email: string;
+  codeHash: string;
+  requestId: string;
+  expiresAt: number;
+  deliveryStatus: "pending" | "queued" | "sent" | "failed";
+}): OtpEntity => ({
+  partitionKey: OTP_SCOPE,
+  rowKey: toOtpDocId(email),
+  type: OTP_TYPE,
+  email,
+  codeHash,
+  requestId,
+  attempts: 0,
+  createdAt: Date.now(),
+  expiresAt,
+  deliveryStatus,
+  queuedAt: deliveryStatus === "queued" ? Date.now() : undefined,
+  sentAt: deliveryStatus === "sent" ? Date.now() : undefined,
+});
+
+const getOtpEntity = async (email: string) => {
+  const tableClient = await getAppTableClient();
+  return tableClient.getEntity<OtpEntity>(OTP_SCOPE, toOtpDocId(email));
+};
+
+const updateOtpEntity = async (email: string, requestId: string, patch: Partial<OtpEntity>) => {
+  const tableClient = await getAppTableClient();
+  let existing: OtpEntity;
+
+  try {
+    existing = await getOtpEntity(email);
+  } catch (error) {
+    if (isTableNotFoundError(error)) {
+      return false;
+    }
+
+    throw error;
+  }
+
+  if (existing.requestId !== requestId) {
+    return false;
+  }
+
+  await tableClient.upsertEntity<OtpEntity>({
+    ...existing,
+    ...patch,
+    partitionKey: OTP_SCOPE,
+    rowKey: toOtpDocId(email),
+    type: OTP_TYPE,
+    email,
+    updatedAt: Date.now(),
+  }, "Replace");
+
+  return true;
+};
+
 export const isValidEmail = (email: string) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 };
@@ -77,21 +146,118 @@ export const sendLoginOtp = async (email: string) => {
   }
 
   const otpCode = createOtpCode();
-  await sendOtpEmail(normalizedEmail, otpCode);
-
-  const tableClient = await getAppTableClient();
   const expiresAt = Date.now() + OTP_TTL_MS;
+  const requestId = randomUUID();
+  const tableClient = await getAppTableClient();
 
-  await tableClient.upsertEntity<OtpEntity>({
-    partitionKey: OTP_SCOPE,
-    rowKey: toOtpDocId(normalizedEmail),
-    type: OTP_TYPE,
+  await tableClient.upsertEntity<OtpEntity>(
+    toOtpEntity({
+      email: normalizedEmail,
+      codeHash: hashOtpCode(normalizedEmail, otpCode),
+      requestId,
+      expiresAt,
+      deliveryStatus: "pending",
+    }),
+    "Replace",
+  );
+
+  if (!isServiceBusConfigured()) {
+    try {
+      await sendOtpEmail(normalizedEmail, otpCode);
+      await markLoginOtpEmailSent(normalizedEmail, requestId);
+    } catch (error) {
+      await markLoginOtpEmailFailed(
+        normalizedEmail,
+        requestId,
+        error instanceof Error ? error.message : "Failed to send OTP email.",
+      );
+      throw error;
+    }
+
+    return {
+      email: normalizedEmail,
+      requestId,
+      deliveryStatus: "sent" as const,
+    };
+  }
+
+  const { enqueueOtpEmail } = await import("./otp-email-queue");
+  try {
+    await enqueueOtpEmail({
+      requestId,
+      email: normalizedEmail,
+      otpCode,
+    });
+  } catch (error) {
+    await markLoginOtpEmailFailed(
+      normalizedEmail,
+      requestId,
+      error instanceof Error ? error.message : "Failed to queue OTP email.",
+    );
+    throw error;
+  }
+
+  return {
     email: normalizedEmail,
-    codeHash: hashOtpCode(normalizedEmail, otpCode),
-    attempts: 0,
-    createdAt: Date.now(),
-    expiresAt,
-  }, "Replace");
+    requestId,
+    deliveryStatus: "queued" as const,
+  };
+};
+
+export const markLoginOtpEmailQueued = async (email: string, requestId: string) => {
+  await updateOtpEntity(email, requestId, {
+    deliveryStatus: "queued",
+    deliveryError: "",
+    queuedAt: Date.now(),
+  });
+};
+
+export const markLoginOtpEmailSent = async (email: string, requestId: string) => {
+  await updateOtpEntity(email, requestId, {
+    deliveryStatus: "sent",
+    deliveryError: "",
+    sentAt: Date.now(),
+  });
+};
+
+export const markLoginOtpEmailFailed = async (email: string, requestId: string, errorMessage: string) => {
+  await updateOtpEntity(email, requestId, {
+    deliveryStatus: "failed",
+    deliveryError: errorMessage,
+  });
+};
+
+export const getLoginOtpDeliveryStatus = async (email: string, requestId: string) => {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  if (!isValidEmail(normalizedEmail)) {
+    throw new OtpValidationError("Enter a valid email address.");
+  }
+
+  if (!requestId.trim()) {
+    throw new OtpValidationError("OTP request id is required.");
+  }
+
+  try {
+    const data = await getOtpEntity(normalizedEmail);
+
+    if (data.requestId !== requestId.trim()) {
+      throw new OtpValidationError("OTP request was not found.");
+    }
+
+    return {
+      requestId: data.requestId,
+      status: data.deliveryStatus ?? "pending",
+      error: data.deliveryError ?? null,
+      expiresAt: Number(data.expiresAt ?? 0),
+    };
+  } catch (error) {
+    if (isTableNotFoundError(error)) {
+      throw new OtpValidationError("OTP request was not found.");
+    }
+
+    throw error;
+  }
 };
 
 export const verifyLoginOtp = async (email: string, otpCode: string) => {

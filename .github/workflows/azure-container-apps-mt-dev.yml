@@ -16,19 +16,24 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGISTRY_NAME: ${{ secrets.AZURE_CONTAINER_REGISTRY_NAME_MT_DEV }}
-  REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_CONTAINER_REGISTRY_LOGIN_SERVER_MT_DEV }}
-  RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP_MT_DEV }}
-  CONTAINER_APP_NAME: ${{ secrets.AZURE_CONTAINER_APP_NAME_MT_DEV }}
-  CONTAINER_APP_ENVIRONMENT: ${{ secrets.AZURE_CONTAINERAPPS_ENVIRONMENT_MT_DEV }}
-  STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME_MT_DEV }}
-  COMMUNICATION_SERVICE_NAME: ${{ secrets.AZURE_COMMUNICATION_SERVICE_NAME_MT_DEV }}
-  EMAIL_SENDER_ADDRESS: ${{ secrets.AZURE_EMAIL_SENDER_ADDRESS_MT_DEV }}
-  AUTH_SECRET: ${{ secrets.AUTH_SECRET_MT_DEV }}
-  ADMIN_PERMISSION_TOKEN: ${{ secrets.ADMIN_PERMISSION_TOKEN_MT_DEV }}
-  ADMIN_PERMISSION_TOKEN_EXPIRES_AT: ${{ secrets.ADMIN_PERMISSION_TOKEN_EXPIRES_AT_MT_DEV }}
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_MT_DEV }}
-  ATS_OPENAI_MODEL: ${{ secrets.ATS_OPENAI_MODEL_MT_DEV }}
+  AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  REGISTRY_NAME: ${{ vars.AZURE_CONTAINER_REGISTRY_NAME }}
+  REGISTRY_LOGIN_SERVER: ${{ vars.AZURE_CONTAINER_REGISTRY_LOGIN_SERVER }}
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  CONTAINER_APP_NAME: ${{ vars.AZURE_CONTAINER_APP_NAME }}
+  CONTAINER_APP_ENVIRONMENT: ${{ vars.AZURE_CONTAINERAPPS_ENVIRONMENT }}
+  STORAGE_ACCOUNT_NAME: ${{ vars.AZURE_STORAGE_ACCOUNT_NAME }}
+  COMMUNICATION_SERVICE_NAME: ${{ vars.AZURE_COMMUNICATION_SERVICE_NAME }}
+  SERVICE_BUS_NAMESPACE_NAME: ${{ vars.AZURE_SERVICE_BUS_NAMESPACE_NAME }}
+  SERVICE_BUS_OTP_QUEUE_NAME: ${{ vars.AZURE_SERVICE_BUS_OTP_QUEUE_NAME }}
+  EMAIL_SENDER_ADDRESS: ${{ vars.AZURE_EMAIL_SENDER_ADDRESS }}
+  AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+  ADMIN_PERMISSION_TOKEN: ${{ secrets.ADMIN_PERMISSION_TOKEN }}
+  ADMIN_PERMISSION_TOKEN_EXPIRES_AT: ${{ vars.ADMIN_PERMISSION_TOKEN_EXPIRES_AT }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  ATS_OPENAI_MODEL: ${{ vars.ATS_OPENAI_MODEL }}
   IMAGE_NAME: cv-collector-mt-dev
   MANAGED_IDENTITY_NAME: id-registry-pull
   NODE_VERSION: 20
@@ -58,6 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: quality
     if: github.event_name == 'push' && github.ref == 'refs/heads/multitenancy'
+    environment: dev
 
     steps:
       - uses: actions/checkout@v4
@@ -69,9 +75,9 @@ jobs:
 
       - uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID_MT_DEV }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID_MT_DEV }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_MT_DEV }}
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
       - name: Validate workflow secrets
         run: |
@@ -85,6 +91,8 @@ jobs:
             CONTAINER_APP_ENVIRONMENT
             STORAGE_ACCOUNT_NAME
             COMMUNICATION_SERVICE_NAME
+            SERVICE_BUS_NAMESPACE_NAME
+            SERVICE_BUS_OTP_QUEUE_NAME
             EMAIL_SENDER_ADDRESS
             AUTH_SECRET
             ADMIN_PERMISSION_TOKEN
@@ -117,6 +125,7 @@ jobs:
           RESOURCE_GROUP: ${{ env.RESOURCE_GROUP }}
           STORAGE_ACCOUNT_NAME: ${{ env.STORAGE_ACCOUNT_NAME }}
           COMMUNICATION_SERVICE_NAME: ${{ env.COMMUNICATION_SERVICE_NAME }}
+          SERVICE_BUS_NAMESPACE_NAME: ${{ env.SERVICE_BUS_NAMESPACE_NAME }}
           MANAGED_IDENTITY_NAME: ${{ env.MANAGED_IDENTITY_NAME }}
         with:
           inlineScript: |
@@ -134,6 +143,13 @@ jobs:
               --query primaryConnectionString \
               --output tsv)
 
+            SERVICE_BUS_CONNECTION_STRING=$(az servicebus namespace authorization-rule keys list \
+              --resource-group "$RESOURCE_GROUP" \
+              --namespace-name "$SERVICE_BUS_NAMESPACE_NAME" \
+              --name RootManageSharedAccessKey \
+              --query primaryConnectionString \
+              --output tsv)
+
             MANAGED_IDENTITY_ID=$(az identity show \
               --name "$MANAGED_IDENTITY_NAME" \
               --resource-group "$RESOURCE_GROUP" \
@@ -143,6 +159,7 @@ jobs:
             {
               echo "storage_connection_string=$STORAGE_CONNECTION_STRING"
               echo "communication_connection_string=$COMMUNICATION_CONNECTION_STRING"
+              echo "service_bus_connection_string=$SERVICE_BUS_CONNECTION_STRING"
               echo "managed_identity_id=$MANAGED_IDENTITY_ID"
             } >> "$GITHUB_OUTPUT"
 
@@ -192,7 +209,8 @@ jobs:
                   admin-permission-token="$ADMIN_PERMISSION_TOKEN" \
                   openai-api-key="$OPENAI_API_KEY" \
                   storage-connection="${{ steps.resolve-runtime-values.outputs.storage_connection_string }}" \
-                  communication-connection="${{ steps.resolve-runtime-values.outputs.communication_connection_string }}"
+                  communication-connection="${{ steps.resolve-runtime-values.outputs.communication_connection_string }}" \
+                  service-bus-connection="${{ steps.resolve-runtime-values.outputs.service_bus_connection_string }}"
 
               az containerapp update \
                 --name "$CONTAINER_APP_NAME" \
@@ -204,6 +222,8 @@ jobs:
                   AZURE_BLOB_CONTAINER=cv-files \
                   AZURE_TABLES_TABLE_NAME=cvcollector \
                   AZURE_COMMUNICATION_CONNECTION_STRING=secretref:communication-connection \
+                  AZURE_SERVICE_BUS_CONNECTION_STRING=secretref:service-bus-connection \
+                  AZURE_SERVICE_BUS_OTP_QUEUE_NAME="$SERVICE_BUS_OTP_QUEUE_NAME" \
                   AZURE_EMAIL_SENDER_ADDRESS="$EMAIL_SENDER_ADDRESS" \
                   AUTH_SECRET=secretref:auth-secret \
                   ADMIN_PERMISSION_TOKEN=secretref:admin-permission-token \
@@ -231,12 +251,15 @@ jobs:
                   openai-api-key="$OPENAI_API_KEY" \
                   storage-connection="${{ steps.resolve-runtime-values.outputs.storage_connection_string }}" \
                   communication-connection="${{ steps.resolve-runtime-values.outputs.communication_connection_string }}" \
+                  service-bus-connection="${{ steps.resolve-runtime-values.outputs.service_bus_connection_string }}" \
                 --env-vars \
                   NODE_ENV=production \
                   AZURE_STORAGE_CONNECTION_STRING=secretref:storage-connection \
                   AZURE_BLOB_CONTAINER=cv-files \
                   AZURE_TABLES_TABLE_NAME=cvcollector \
                   AZURE_COMMUNICATION_CONNECTION_STRING=secretref:communication-connection \
+                  AZURE_SERVICE_BUS_CONNECTION_STRING=secretref:service-bus-connection \
+                  AZURE_SERVICE_BUS_OTP_QUEUE_NAME="$SERVICE_BUS_OTP_QUEUE_NAME" \
                   AZURE_EMAIL_SENDER_ADDRESS="$EMAIL_SENDER_ADDRESS" \
                   AUTH_SECRET=secretref:auth-secret \
                   ADMIN_PERMISSION_TOKEN=secretref:admin-permission-token \

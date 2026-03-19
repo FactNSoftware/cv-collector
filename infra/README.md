@@ -22,6 +22,7 @@ For GitHub OIDC, environment variable/secret setup, and branch deployment flow, 
 - Azure Communication Services resource
 - Azure Email Communication Service
 - Optional Azure-managed email domain linked to ACS
+- Azure Service Bus namespace and OTP email queue
 - AcrPull role assignment from the user-assigned identity to ACR
 
 ## Account-Safe Deployment

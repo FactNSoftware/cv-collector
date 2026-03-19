@@ -46,7 +46,7 @@ export function SystemLoginForm() {
         return false;
       }
 
-      showToast("OTP sent. Check your inbox.");
+      showToast(payload.message || "OTP requested successfully.");
       return true;
     } catch {
       showToast("Something went wrong while sending OTP.", "error");

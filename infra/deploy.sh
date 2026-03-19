@@ -436,6 +436,7 @@ stack_resources_available_in_group() {
   local storage_account_name
   local registry_name
   local communication_service_name
+  local service_bus_namespace_name
   local group_exists
 
   group_exists="$(az group exists --name "$resource_group_name" -o tsv 2>/dev/null || echo "false")"
@@ -446,14 +447,16 @@ stack_resources_available_in_group() {
   storage_account_name="$(find_resource_name_in_group "$resource_group_name" "Microsoft.Storage/storageAccounts" "$app_name")"
   registry_name="$(find_resource_name_in_group "$resource_group_name" "Microsoft.ContainerRegistry/registries" "$app_name")"
   communication_service_name="$(find_resource_name_in_group "$resource_group_name" "Microsoft.Communication/communicationServices" "$app_name")"
+  service_bus_namespace_name="$(find_resource_name_in_group "$resource_group_name" "Microsoft.ServiceBus/namespaces" "$app_name")"
 
-  if [[ -z "$storage_account_name" || -z "$registry_name" || -z "$communication_service_name" ]]; then
+  if [[ -z "$storage_account_name" || -z "$registry_name" || -z "$communication_service_name" || -z "$service_bus_namespace_name" ]]; then
     return 1
   fi
 
   az storage account show --name "$storage_account_name" --resource-group "$resource_group_name" --query name -o tsv >/dev/null 2>&1 || return 1
   az acr show --name "$registry_name" --resource-group "$resource_group_name" --query name -o tsv >/dev/null 2>&1 || return 1
   az communication show --name "$communication_service_name" --resource-group "$resource_group_name" --query name -o tsv >/dev/null 2>&1 || return 1
+  az servicebus namespace show --name "$service_bus_namespace_name" --resource-group "$resource_group_name" --query name -o tsv >/dev/null 2>&1 || return 1
 
   return 0
 }
@@ -465,8 +468,9 @@ resolve_stack_values_from_resource_group() {
   STORAGE_ACCOUNT_NAME="$(find_resource_name_in_group "$resource_group_name" "Microsoft.Storage/storageAccounts" "$app_name")"
   REGISTRY_NAME="$(find_resource_name_in_group "$resource_group_name" "Microsoft.ContainerRegistry/registries" "$app_name")"
   COMMUNICATION_SERVICE_NAME="$(find_resource_name_in_group "$resource_group_name" "Microsoft.Communication/communicationServices" "$app_name")"
+  SERVICE_BUS_NAMESPACE_NAME="$(find_resource_name_in_group "$resource_group_name" "Microsoft.ServiceBus/namespaces" "$app_name")"
 
-  if [[ -z "$STORAGE_ACCOUNT_NAME" || -z "$REGISTRY_NAME" || -z "$COMMUNICATION_SERVICE_NAME" ]]; then
+  if [[ -z "$STORAGE_ACCOUNT_NAME" || -z "$REGISTRY_NAME" || -z "$COMMUNICATION_SERVICE_NAME" || -z "$SERVICE_BUS_NAMESPACE_NAME" ]]; then
     return 1
   fi
 
@@ -490,6 +494,7 @@ stack_resources_available() {
   local storage_account_name
   local registry_login_server
   local communication_service_name
+  local service_bus_namespace_name
   local registry_name
   local group_exists
 
@@ -501,6 +506,7 @@ stack_resources_available() {
   storage_account_name="$(az deployment sub show --name "$deployment_name" --query properties.outputs.storageAccountName.value -o tsv 2>/dev/null || true)"
   registry_login_server="$(az deployment sub show --name "$deployment_name" --query properties.outputs.registryLoginServer.value -o tsv 2>/dev/null || true)"
   communication_service_name="$(az deployment sub show --name "$deployment_name" --query properties.outputs.communicationServiceName.value -o tsv 2>/dev/null || true)"
+  service_bus_namespace_name="$(az deployment sub show --name "$deployment_name" --query properties.outputs.serviceBusNamespaceName.value -o tsv 2>/dev/null || true)"
 
   if [[ -z "$storage_account_name" || "$storage_account_name" == "null" ]]; then
     return 1
@@ -514,11 +520,16 @@ stack_resources_available() {
     return 1
   fi
 
+  if [[ -z "$service_bus_namespace_name" || "$service_bus_namespace_name" == "null" ]]; then
+    return 1
+  fi
+
   registry_name="${registry_login_server%%.*}"
 
   az storage account show --name "$storage_account_name" --resource-group "$resource_group_name" --query name -o tsv >/dev/null 2>&1 || return 1
   az acr show --name "$registry_name" --resource-group "$resource_group_name" --query name -o tsv >/dev/null 2>&1 || return 1
   az communication show --name "$communication_service_name" --resource-group "$resource_group_name" --query name -o tsv >/dev/null 2>&1 || return 1
+  az servicebus namespace show --name "$service_bus_namespace_name" --resource-group "$resource_group_name" --query name -o tsv >/dev/null 2>&1 || return 1
 
   return 0
 }
@@ -792,24 +803,32 @@ log_info "Resolving deployed resource values..."
 STORAGE_ACCOUNT_NAME=""
 REGISTRY_LOGIN_SERVER=""
 COMMUNICATION_SERVICE_NAME=""
+SERVICE_BUS_NAMESPACE_NAME=""
+OTP_EMAIL_QUEUE_NAME=""
 REGISTRY_NAME=""
 
 if [[ -n "$DEPLOYMENT_TO_USE" ]]; then
   if STORAGE_ACCOUNT_NAME="$(retry_until_nonempty "storage account output" 10 az deployment sub show --name "$DEPLOYMENT_TO_USE" --query properties.outputs.storageAccountName.value -o tsv)" \
     && REGISTRY_LOGIN_SERVER="$(retry_until_nonempty "registry login server output" 10 az deployment sub show --name "$DEPLOYMENT_TO_USE" --query properties.outputs.registryLoginServer.value -o tsv)" \
-    && COMMUNICATION_SERVICE_NAME="$(retry_until_nonempty "communication service output" 10 az deployment sub show --name "$DEPLOYMENT_TO_USE" --query properties.outputs.communicationServiceName.value -o tsv)"; then
+    && COMMUNICATION_SERVICE_NAME="$(retry_until_nonempty "communication service output" 10 az deployment sub show --name "$DEPLOYMENT_TO_USE" --query properties.outputs.communicationServiceName.value -o tsv)" \
+    && SERVICE_BUS_NAMESPACE_NAME="$(retry_until_nonempty "service bus namespace output" 10 az deployment sub show --name "$DEPLOYMENT_TO_USE" --query properties.outputs.serviceBusNamespaceName.value -o tsv)" \
+    && OTP_EMAIL_QUEUE_NAME="$(retry_until_nonempty "otp email queue output" 10 az deployment sub show --name "$DEPLOYMENT_TO_USE" --query properties.outputs.otpEmailQueueName.value -o tsv)"; then
     log_success "Resolved stack values from deployment outputs: $DEPLOYMENT_TO_USE"
   else
     log_warn "Could not resolve deployment outputs from '$DEPLOYMENT_TO_USE'. Falling back to resource-group discovery."
   fi
 fi
 
-if [[ -z "$STORAGE_ACCOUNT_NAME" || -z "$REGISTRY_LOGIN_SERVER" || -z "$COMMUNICATION_SERVICE_NAME" ]]; then
+if [[ -z "$STORAGE_ACCOUNT_NAME" || -z "$REGISTRY_LOGIN_SERVER" || -z "$COMMUNICATION_SERVICE_NAME" || -z "$SERVICE_BUS_NAMESPACE_NAME" ]]; then
   if ! resolve_stack_values_from_resource_group "$RESOURCE_GROUP_NAME" "$APP_NAME"; then
     log_error "Could not resolve required resources in resource group '$RESOURCE_GROUP_NAME'."
     exit 1
   fi
   log_success "Resolved stack values from resource-group discovery."
+fi
+
+if [[ -z "$OTP_EMAIL_QUEUE_NAME" || "$OTP_EMAIL_QUEUE_NAME" == "null" ]]; then
+  OTP_EMAIL_QUEUE_NAME="otp-email"
 fi
 
 CONTAINER_APP_NAME=""
@@ -844,6 +863,7 @@ fi
 
 STORAGE_CONNECTION_STRING="$(retry_until_nonempty "storage connection string" 20 az storage account show-connection-string --name "$STORAGE_ACCOUNT_NAME" --resource-group "$RESOURCE_GROUP_NAME" --query connectionString -o tsv)"
 COMMUNICATION_CONNECTION_STRING="$(retry_until_nonempty "communication connection string" 20 az communication list-key --name "$COMMUNICATION_SERVICE_NAME" --resource-group "$RESOURCE_GROUP_NAME" --query primaryConnectionString -o tsv)"
+SERVICE_BUS_CONNECTION_STRING="$(retry_until_nonempty "service bus connection string" 20 az servicebus namespace authorization-rule keys list --resource-group "$RESOURCE_GROUP_NAME" --namespace-name "$SERVICE_BUS_NAMESPACE_NAME" --name RootManageSharedAccessKey --query primaryConnectionString -o tsv)"
 
 if [[ -f "$ENV_FILE" ]]; then
   EXISTING_AUTH_SECRET="$(get_env_value "$ENV_FILE" AUTH_SECRET)"
@@ -912,6 +932,9 @@ AZURE_CONTAINER_REGISTRY_NAME=${REGISTRY_NAME}
 AZURE_CONTAINER_REGISTRY_LOGIN_SERVER=${REGISTRY_LOGIN_SERVER}
 AZURE_STORAGE_ACCOUNT_NAME=${STORAGE_ACCOUNT_NAME}
 AZURE_COMMUNICATION_SERVICE_NAME=${COMMUNICATION_SERVICE_NAME}
+AZURE_SERVICE_BUS_NAMESPACE_NAME=${SERVICE_BUS_NAMESPACE_NAME}
+AZURE_SERVICE_BUS_CONNECTION_STRING=${SERVICE_BUS_CONNECTION_STRING}
+AZURE_SERVICE_BUS_OTP_QUEUE_NAME=${OTP_EMAIL_QUEUE_NAME}
 AZURE_STORAGE_CONNECTION_STRING=${STORAGE_CONNECTION_STRING}
 AZURE_COMMUNICATION_CONNECTION_STRING=${COMMUNICATION_CONNECTION_STRING}
 AZURE_BLOB_CONTAINER=cv-files
@@ -938,6 +961,9 @@ REQUIRED_ENV_KEYS=(
   AZURE_COMMUNICATION_CONNECTION_STRING
   AZURE_STORAGE_ACCOUNT_NAME
   AZURE_COMMUNICATION_SERVICE_NAME
+  AZURE_SERVICE_BUS_NAMESPACE_NAME
+  AZURE_SERVICE_BUS_CONNECTION_STRING
+  AZURE_SERVICE_BUS_OTP_QUEUE_NAME
   AZURE_RESOURCE_GROUP
   AZURE_CONTAINER_APP_NAME
   AZURE_CONTAINERAPPS_ENVIRONMENT
@@ -970,6 +996,9 @@ EXPECTED_ENV_KEYS=(
   AZURE_COMMUNICATION_CONNECTION_STRING
   AZURE_STORAGE_ACCOUNT_NAME
   AZURE_COMMUNICATION_SERVICE_NAME
+  AZURE_SERVICE_BUS_NAMESPACE_NAME
+  AZURE_SERVICE_BUS_CONNECTION_STRING
+  AZURE_SERVICE_BUS_OTP_QUEUE_NAME
   AZURE_RESOURCE_GROUP
   AZURE_CONTAINER_APP_NAME
   AZURE_CONTAINERAPPS_ENVIRONMENT
@@ -991,6 +1020,9 @@ EXPECTED_ENV_VALUES=(
   "$COMMUNICATION_CONNECTION_STRING"
   "$STORAGE_ACCOUNT_NAME"
   "$COMMUNICATION_SERVICE_NAME"
+  "$SERVICE_BUS_NAMESPACE_NAME"
+  "$SERVICE_BUS_CONNECTION_STRING"
+  "$OTP_EMAIL_QUEUE_NAME"
   "$RESOURCE_GROUP_NAME"
   "$CONTAINER_APP_NAME"
   "$CONTAINER_APP_ENVIRONMENT"
@@ -1080,6 +1112,9 @@ if [[ "$SYNC_ENV" == "true" ]]; then
     upsert_env_value "$ENV_FILE" AZURE_COMMUNICATION_CONNECTION_STRING "$COMMUNICATION_CONNECTION_STRING"
     upsert_env_value "$ENV_FILE" AZURE_STORAGE_ACCOUNT_NAME "$STORAGE_ACCOUNT_NAME"
     upsert_env_value "$ENV_FILE" AZURE_COMMUNICATION_SERVICE_NAME "$COMMUNICATION_SERVICE_NAME"
+    upsert_env_value "$ENV_FILE" AZURE_SERVICE_BUS_NAMESPACE_NAME "$SERVICE_BUS_NAMESPACE_NAME"
+    upsert_env_value "$ENV_FILE" AZURE_SERVICE_BUS_CONNECTION_STRING "$SERVICE_BUS_CONNECTION_STRING"
+    upsert_env_value "$ENV_FILE" AZURE_SERVICE_BUS_OTP_QUEUE_NAME "$OTP_EMAIL_QUEUE_NAME"
     upsert_env_value "$ENV_FILE" AZURE_RESOURCE_GROUP "$RESOURCE_GROUP_NAME"
     upsert_env_value "$ENV_FILE" AZURE_CONTAINER_APP_NAME "$CONTAINER_APP_NAME"
     upsert_env_value "$ENV_FILE" AZURE_CONTAINERAPPS_ENVIRONMENT "$CONTAINER_APP_ENVIRONMENT"
@@ -1143,6 +1178,9 @@ if [[ "$SYNC_GH" == "true" ]]; then
         AZURE_CONTAINER_REGISTRY_LOGIN_SERVER
         AZURE_STORAGE_ACCOUNT_NAME
         AZURE_COMMUNICATION_SERVICE_NAME
+        AZURE_SERVICE_BUS_NAMESPACE_NAME
+        AZURE_SERVICE_BUS_CONNECTION_STRING
+        AZURE_SERVICE_BUS_OTP_QUEUE_NAME
         AZURE_EMAIL_SENDER_ADDRESS
         AUTH_SECRET
         ADMIN_PERMISSION_TOKEN
@@ -1167,6 +1205,9 @@ if [[ "$SYNC_GH" == "true" ]]; then
         "$REGISTRY_LOGIN_SERVER"
         "$STORAGE_ACCOUNT_NAME"
         "$COMMUNICATION_SERVICE_NAME"
+        "$SERVICE_BUS_NAMESPACE_NAME"
+        "$SERVICE_BUS_CONNECTION_STRING"
+        "$OTP_EMAIL_QUEUE_NAME"
         "$EMAIL_SENDER_FINAL"
         "$AUTH_SECRET_FINAL"
         "$ADMIN_PERMISSION_TOKEN_FINAL"
