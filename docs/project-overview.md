@@ -15,6 +15,7 @@ See also:
 - [ATS Evaluation](./features/ats-evaluation.md)
 - [Chat And Messaging](./features/chat-and-messaging.md)
 - [Admin Operations And Audit](./features/admin-operations.md)
+- [Portal Capability Inventory](./features/portal-capability-inventory.md)
 - [Subscriptions And Feature Access](./features/subscriptions-and-feature-access.md)
 - [Feature Security And Authorization](./features/feature-security-and-authorization.md)
 

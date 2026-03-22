@@ -5,9 +5,11 @@ import { usePathname } from "next/navigation";
 import {
   Building2,
   ClipboardList,
+  CreditCard,
   BriefcaseBusiness,
   House,
   LayoutGrid,
+  LogOut,
   MessageSquare,
   Settings,
   ShieldCheck,
@@ -15,10 +17,9 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { isFeatureEnabled } from "../../lib/feature-catalog";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { LogoutButton } from "./LogoutButton";
 
 type PortalShellProps = {
   portal: "admin" | "candidate" | "system" | "tenant";
@@ -63,6 +64,150 @@ type TenantOrganizationOption = {
   logoUrl?: string | null;
 };
 
+type UserMenuItem = {
+  href?: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  onClick?: () => void;
+  tone?: "default" | "danger";
+};
+
+const formatSessionDisplayName = (email: string) => {
+  const localPart = email.trim().split("@")[0] ?? "";
+
+  if (!localPart) {
+    return "Account";
+  }
+
+  return localPart
+    .replace(/[._-]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+};
+
+function PortalUserMenu({
+  sessionEmail,
+  displayName,
+  items,
+  compact = false,
+}: {
+  sessionEmail: string;
+  displayName: string;
+  items: UserMenuItem[];
+  compact?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const initials = useMemo(() => {
+    const nameParts = displayName.split(" ").filter(Boolean);
+    return (nameParts[0]?.[0] ?? sessionEmail[0] ?? "U").toUpperCase();
+  }, [displayName, sessionEmail]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isOpen]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        className={`group flex items-center gap-3 text-left transition ${
+          compact
+            ? "mx-auto h-12 w-12 justify-center rounded-full border border-[var(--color-border)] bg-white p-1 shadow-[var(--shadow-soft)] hover:border-[var(--color-border-strong)]"
+            : "w-full rounded-[18px] border border-[var(--color-border)] bg-white px-3 py-2 hover:border-[var(--color-border-strong)]"
+        }`}
+      >
+        <span className={`flex shrink-0 items-center justify-center rounded-full bg-[var(--color-panel-strong)] text-sm font-semibold text-[var(--color-brand-strong)] ${
+          compact ? "h-9 w-9" : "h-10 w-10"
+        }`}>
+          {initials}
+        </span>
+        {!compact ? (
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold text-[var(--color-ink)]">{displayName}</span>
+            <span className="block truncate text-xs text-[var(--color-muted)]">{sessionEmail}</span>
+          </span>
+        ) : null}
+      </button>
+
+      {isOpen ? (
+        <div className={`absolute z-40 w-[260px] rounded-[18px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-2 shadow-[var(--shadow-soft)] ${
+          compact ? "bottom-0 left-[calc(100%+10px)]" : "bottom-[calc(100%+10px)] left-0"
+        }`}>
+          <div className="rounded-[14px] bg-white px-3 py-3">
+            <p className="truncate text-sm font-semibold text-[var(--color-ink)]">{displayName}</p>
+            <p className="mt-1 truncate text-xs text-[var(--color-muted)]">{sessionEmail}</p>
+          </div>
+          <div className="mt-2 space-y-1">
+            {items.map((item) => {
+              const Icon = item.icon;
+              const className = `flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-sm transition ${
+                item.tone === "danger"
+                  ? "text-red-600 hover:bg-red-50"
+                  : "text-[var(--color-ink)] hover:bg-white"
+              }`;
+
+              if (item.href) {
+                return (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    onClick={() => setIsOpen(false)}
+                    className={className}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              }
+
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    item.onClick?.();
+                  }}
+                  className={className}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const ADMIN_NAV: NavItem[] = [
   { href: "/admin", label: "Dashboard", icon: House },
   { href: "/admin/jobs", label: "Jobs", icon: BriefcaseBusiness, matchPrefix: "/admin/jobs" },
@@ -104,6 +249,13 @@ const buildTenantNav = (slug: string, tenantFeatureKeys?: string[]): NavItem[] =
 
   return items;
 };
+
+const TENANT_LOADING_NAV: NavItem[] = [
+  { href: "/__tenant-loading/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { href: "/__tenant-loading/jobs", label: "Jobs", icon: BriefcaseBusiness },
+  { href: "/__tenant-loading/candidates", label: "Candidates", icon: Users },
+  { href: "/__tenant-loading/settings", label: "Settings", icon: Settings },
+];
 
 const normalizeTenantPath = (path: string, slug: string) => {
   const base = `/o/${slug}`;
@@ -339,6 +491,7 @@ export function PortalShell({
   const [cachedOrgName, setCachedOrgName] = useState<string | null>(null);
   const [showTenantExitConfirm, setShowTenantExitConfirm] = useState(false);
   const [isTenantExitLoading, setIsTenantExitLoading] = useState(false);
+  const [isMenuLogoutLoading, setIsMenuLogoutLoading] = useState(false);
   const chatNavSnapshot = useSyncExternalStore(
     (onStoreChange) => {
       if (typeof window === "undefined") {
@@ -379,7 +532,7 @@ export function PortalShell({
     }
 
     if (portal === "tenant") {
-      return organizationSlug ? buildTenantNav(organizationSlug, tenantFeatureKeys) : SYSTEM_NAV;
+      return organizationSlug ? buildTenantNav(organizationSlug, tenantFeatureKeys) : TENANT_LOADING_NAV;
     }
 
     const chatItem: NavItem = {
@@ -609,6 +762,42 @@ export function PortalShell({
     };
   }, [portal, sessionEmail]);
 
+  const displayName = useMemo(
+    () => formatSessionDisplayName(sessionEmail),
+    [sessionEmail],
+  );
+  const currentTenantOption = useMemo(
+    () => tenantSwitcherItems.find((item) => item.slug === organizationSlug) ?? null,
+    [organizationSlug, tenantSwitcherItems],
+  );
+  const accountHref = useMemo(() => {
+    if (portal === "candidate") {
+      return "/account";
+    }
+
+    if (portal === "admin") {
+      return "/admin/account";
+    }
+
+    if (portal === "system") {
+      return "/system/account";
+    }
+
+    return organizationSlug ? `/o/${organizationSlug}/account` : undefined;
+  }, [organizationSlug, portal]);
+  const billingHref = useMemo(() => {
+    if (
+      portal !== "tenant"
+      || !organizationSlug
+      || !currentTenantOption
+      || (currentTenantOption.role !== "owner" && !currentTenantOption.isRootOwner)
+    ) {
+      return undefined;
+    }
+
+    return `/o/${organizationSlug}/billing`;
+  }, [currentTenantOption, organizationSlug, portal]);
+
   const handleTenantExitConfirm = async () => {
     setIsTenantExitLoading(true);
 
@@ -625,6 +814,52 @@ export function PortalShell({
       window.location.assign(`${protocol}//lvh.me${portSuffix}/`);
     }
   };
+
+  const handleMenuLogout = async () => {
+    setIsMenuLogoutLoading(true);
+
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch {
+      // Ignore logout failures and continue to the public home.
+    } finally {
+      const { protocol, port } = window.location;
+      const portSuffix = port ? `:${port}` : "";
+      window.location.assign(`${protocol}//lvh.me${portSuffix}/`);
+    }
+  };
+
+  const userMenuItems = useMemo<UserMenuItem[]>(() => {
+    const items: UserMenuItem[] = [];
+
+    if (accountHref) {
+      items.push({
+        href: accountHref,
+        label: "Account",
+        icon: UserRound,
+      });
+    }
+
+    if (billingHref) {
+      items.push({
+        href: billingHref,
+        label: "Billing",
+        icon: CreditCard,
+      });
+    }
+
+    items.push({
+      label: isMenuLogoutLoading ? "Logging out..." : "Logout",
+      icon: LogOut,
+      onClick: handleMenuLogout,
+      tone: "danger",
+    });
+
+    return items;
+  }, [accountHref, billingHref, isMenuLogoutLoading]);
 
   return (
     <>
@@ -698,6 +933,14 @@ export function PortalShell({
               </span>
             </Link>
           )}
+          <div className="mt-3">
+            <PortalUserMenu
+              sessionEmail={sessionEmail}
+              displayName={displayName}
+              items={userMenuItems}
+              compact
+            />
+          </div>
         </aside>
 
         <div className="relative z-0 flex min-w-0 flex-1 flex-col gap-3 pb-24 sm:gap-4 lg:pb-0">
@@ -805,7 +1048,21 @@ export function PortalShell({
                     {primaryActionLabel}
                   </Link>
                 )}
-                <LogoutButton />
+                <div className="sm:hidden">
+                  <PortalUserMenu
+                    sessionEmail={sessionEmail}
+                    displayName={displayName}
+                    items={userMenuItems}
+                    compact
+                  />
+                </div>
+                <div className="hidden">
+                  <PortalUserMenu
+                    sessionEmail={sessionEmail}
+                    displayName={displayName}
+                    items={userMenuItems}
+                  />
+                </div>
               </div>
             </div>
 

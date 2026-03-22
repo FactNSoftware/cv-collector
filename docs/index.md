@@ -15,6 +15,7 @@ This documentation set breaks the application into linked feature areas so the p
 - [ATS Evaluation](./features/ats-evaluation.md)
 - [Chat And Messaging](./features/chat-and-messaging.md)
 - [Admin Operations And Audit](./features/admin-operations.md)
+- [Portal Capability Inventory](./features/portal-capability-inventory.md)
 - [Subscriptions And Feature Access](./features/subscriptions-and-feature-access.md)
 - [Feature Security And Authorization](./features/feature-security-and-authorization.md)
 - [Chat Integration Design](./chat-integration.md)
@@ -28,8 +29,9 @@ This documentation set breaks the application into linked feature areas so the p
 5. Read [Authentication And Access](./features/authentication-and-access.md) to understand portals and route protection.
 6. Follow either the [Candidate Experience](./features/candidate-experience.md) or [Admin Operations And Audit](./features/admin-operations.md) path.
 7. Use [Application Lifecycle](./features/application-lifecycle.md), [ATS Evaluation](./features/ats-evaluation.md), and [Chat And Messaging](./features/chat-and-messaging.md) for cross-cutting behavior.
-8. Read [Subscriptions And Feature Access](./features/subscriptions-and-feature-access.md) before building tenant feature gating or packaging.
-9. Read [Feature Security And Authorization](./features/feature-security-and-authorization.md) before implementing new gated APIs or future feature modules.
+8. Read [Portal Capability Inventory](./features/portal-capability-inventory.md) before defining subscription feature groups and functionality keys.
+9. Read [Subscriptions And Feature Access](./features/subscriptions-and-feature-access.md) before building tenant feature gating or packaging.
+10. Read [Feature Security And Authorization](./features/feature-security-and-authorization.md) before implementing new gated APIs or future feature modules.
 
 ## Feature Map
 
@@ -41,5 +43,6 @@ This documentation set breaks the application into linked feature areas so the p
 - ATS evaluation covers background scoring, queue processing, job-level ATS settings, and recalculation.
 - Chat and messaging covers Azure Communication Services thread provisioning, inboxes, read state, and moderation.
 - Admin operations and audit covers dashboard views, access management, audit logs, and maintenance routines.
+- Portal capability inventory maps implemented candidate, admin, and tenant-owner functionality into subscription-ready feature groups.
 - Subscriptions and feature access defines how super admins package, assign, and enforce tenant capabilities.
 - Feature security and authorization defines the capability model, implementation lifecycle, and API-level enforcement strategy for current and upcoming modules.

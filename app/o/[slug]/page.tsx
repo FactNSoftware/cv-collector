@@ -4,6 +4,9 @@ import { listOrganizationsForMemberEmail } from "../../../lib/organizations";
 import { resolveOrganizationAccess } from "../../../lib/organizations";
 import { resolveOrganizationSubscriptionAccess } from "../../../lib/subscriptions";
 import { isSuperAdminEmail } from "../../../lib/super-admin-access";
+import { listOrganizationMemberships } from "../../../lib/organizations";
+import { listJobs } from "../../../lib/jobs";
+import { listCvSubmissions } from "../../../lib/cv-storage";
 import { TenantLoginForm } from "../../components/TenantLoginForm";
 import { TenantPortal } from "../../components/TenantPortal";
 import { notFound } from "next/navigation";
@@ -89,7 +92,12 @@ export default async function TenantPortalPage({ params, searchParams }: Props) 
     );
   }
 
-  const featureAccess = await resolveOrganizationSubscriptionAccess(organization.id);
+  const [featureAccess, members, jobs, submissions] = await Promise.all([
+    resolveOrganizationSubscriptionAccess(organization.id),
+    listOrganizationMemberships(organization.id),
+    listJobs(),
+    listCvSubmissions(),
+  ]);
 
   return (
     <TenantPortal
@@ -100,6 +108,9 @@ export default async function TenantPortalPage({ params, searchParams }: Props) 
       featureKeys={featureAccess.featureKeys}
       effectiveSubscription={featureAccess.subscription}
       featureAccessSource={featureAccess.source}
+      members={members}
+      jobs={jobs.filter((job) => !job.isDeleted)}
+      submissions={submissions}
     />
   );
 }

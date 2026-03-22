@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { parseAtsKeywordInput } from "../../../../../../lib/ats";
-import { requireOrganizationFeatureApiSession } from "../../../../../../lib/auth-guards";
+import {
+  requireOrganizationFeatureApiSession,
+  requireOrganizationFunctionalityApiSession,
+} from "../../../../../../lib/auth-guards";
 import { deleteJob, getJobById, upsertJob } from "../../../../../../lib/jobs";
 
 export const runtime = "nodejs";
@@ -58,6 +61,34 @@ export async function PATCH(
       return NextResponse.json({ message: "Job title is required." }, { status: 400 });
     }
 
+    const isPublishToggleOnly = Object.keys(body).every((key) => key === "isPublished");
+
+    if (isPublishToggleOnly) {
+      const publishAuth = await requireOrganizationFunctionalityApiSession(
+        request,
+        slug,
+        "tenant_jobs",
+        "tenant_jobs.publish",
+        { ownerOnly: true },
+      );
+
+      if ("response" in publishAuth) {
+        return publishAuth.response;
+      }
+    } else {
+      const editAuth = await requireOrganizationFunctionalityApiSession(
+        request,
+        slug,
+        "tenant_jobs",
+        "tenant_jobs.edit",
+        { ownerOnly: true },
+      );
+
+      if ("response" in editAuth) {
+        return editAuth.response;
+      }
+    }
+
     const atsEnabled = Boolean(body.atsEnabled);
     const atsRequiredKeywords = parseAtsKeywordInput(body.atsRequiredKeywords);
     const atsPreferredKeywords = parseAtsKeywordInput(body.atsPreferredKeywords);
@@ -105,7 +136,7 @@ export async function DELETE(
   context: { params: Promise<{ slug: string; id: string }> },
 ) {
   const { slug, id } = await context.params;
-  const auth = await requireOrganizationFeatureApiSession(request, slug, "tenant_jobs", {
+  const auth = await requireOrganizationFunctionalityApiSession(request, slug, "tenant_jobs", "tenant_jobs.delete", {
     ownerOnly: true,
   });
 

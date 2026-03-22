@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireOrganizationFeatureApiSession } from "../../../../../../lib/auth-guards";
+import { requireOrganizationFunctionalityApiSession } from "../../../../../../lib/auth-guards";
 import { getAppBaseUrl } from "../../../../../../lib/app-url";
 import {
   buildOrganizationMembershipRemovedEmailTemplate,
@@ -18,9 +18,15 @@ export async function DELETE(
   context: { params: Promise<{ slug: string; email: string }> },
 ) {
   const { slug, email: rawEmail } = await context.params;
-  const auth = await requireOrganizationFeatureApiSession(request, slug, "tenant_settings", {
+  const auth = await requireOrganizationFunctionalityApiSession(
+    request,
+    slug,
+    "tenant_settings",
+    "tenant_settings.members_remove",
+    {
     ownerOnly: true,
-  });
+    },
+  );
 
   if ("response" in auth) {
     return auth.response;

@@ -697,7 +697,9 @@ export const listFeatureCatalogSummary = (): {
   const all = listFeatureCatalog();
   return {
     all,
-    assignable: all.filter((feature) => isFeatureStatusAssignable(feature.status)),
-    upcoming: all.filter((feature) => !isFeatureStatusAssignable(feature.status)),
+    assignable: listAssignableFeatures(),
+    upcoming: all.filter(
+      (feature) => feature.subscriptionSelectable && !isFeatureStatusAssignable(feature.status),
+    ),
   };
 };

@@ -3,7 +3,7 @@
 import { Layers3, PackagePlus, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import type { FeatureCatalogRecord } from "../../lib/feature-catalog";
+import { getFeatureByFunctionalityKey, type FeatureCatalogRecord } from "../../lib/feature-catalog";
 import type {
   OrganizationSubscriptionAssignmentDetail,
   SubscriptionRecord,
@@ -39,15 +39,22 @@ type Props = {
   upcomingFeatures: FeatureCatalogRecord[];
 };
 
-const toDraft = (subscription: SubscriptionRecord): DraftSubscription => ({
-  name: subscription.name,
-  description: subscription.description ?? "",
-  visibility: subscription.visibility,
-  status: subscription.status,
-  isDefaultPublic: subscription.isDefaultPublic,
-  featureKeys: subscription.featureKeys,
-  functionalityKeys: subscription.functionalityKeys,
-});
+const toDraft = (subscription: SubscriptionRecord): DraftSubscription => {
+  const inferredFeatureKeys = subscription.functionalityKeys
+    .map((functionalityKey) => getFeatureByFunctionalityKey(functionalityKey)?.key ?? null)
+    .filter((featureKey): featureKey is string => Boolean(featureKey));
+  const featureKeys = [...new Set([...subscription.featureKeys, ...inferredFeatureKeys])].sort();
+
+  return {
+    name: subscription.name,
+    description: subscription.description ?? "",
+    visibility: subscription.visibility,
+    status: subscription.status,
+    isDefaultPublic: subscription.isDefaultPublic,
+    featureKeys,
+    functionalityKeys: subscription.functionalityKeys,
+  };
+};
 
 const EMPTY_CREATE_DRAFT: DraftSubscription = {
   name: "",
@@ -128,6 +135,18 @@ function SubscriptionStepperModal({
   const selectedFeatures = useMemo(
     () => assignableFeatures.filter((feature) => draft.featureKeys.includes(feature.key)),
     [assignableFeatures, draft.featureKeys],
+  );
+  const selectedFeatureKeySet = useMemo(
+    () => new Set(draft.featureKeys),
+    [draft.featureKeys],
+  );
+  const selectedAssignableFeatures = useMemo(
+    () => assignableFeatures.filter((feature) => selectedFeatureKeySet.has(feature.key)),
+    [assignableFeatures, selectedFeatureKeySet],
+  );
+  const availableAssignableFeatures = useMemo(
+    () => assignableFeatures.filter((feature) => !selectedFeatureKeySet.has(feature.key)),
+    [assignableFeatures, selectedFeatureKeySet],
   );
 
   const canProceedFromDetails = draft.name.trim().length > 0;
@@ -267,30 +286,74 @@ function SubscriptionStepperModal({
                     Select implemented features on the left. Upcoming features stay visible below for planning.
                   </p>
                   <div className="mt-4 max-h-[52dvh] space-y-3 overflow-y-auto pr-1">
-                    {assignableFeatures.map((feature) => (
-                      <div
-                        key={feature.key}
-                        className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel)] px-4 py-4"
-                      >
-                        <label className="flex items-start gap-3">
-                          <input
-                            type="checkbox"
-                            checked={draft.featureKeys.includes(feature.key)}
-                            className="mt-1 h-4 w-4 rounded border border-[var(--color-border)] accent-[var(--color-brand)]"
-                            onChange={() => onToggleFeature(feature.key)}
-                          />
-                          <span className="min-w-0">
-                            <span className="flex flex-wrap items-center gap-2">
-                              <span className="block text-sm font-medium text-[var(--color-ink)]">{feature.name}</span>
-                              <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${getFeatureBadgeClassName(feature.status)}`}>
-                                {feature.status}
-                              </span>
-                            </span>
-                            <span className="mt-1 block text-xs text-[var(--color-muted)]">{feature.description}</span>
-                          </span>
-                        </label>
+                    {selectedAssignableFeatures.length > 0 ? (
+                      <div>
+                        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
+                          Selected features
+                        </p>
+                        <div className="space-y-3">
+                          {selectedAssignableFeatures.map((feature) => (
+                            <div
+                              key={feature.key}
+                              className="rounded-2xl border border-[var(--color-brand-strong)] bg-[var(--color-panel)] px-4 py-4"
+                            >
+                              <label className="flex items-start gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked
+                                  className="mt-1 h-4 w-4 rounded border border-[var(--color-border)] accent-[var(--color-brand)]"
+                                  onChange={() => onToggleFeature(feature.key)}
+                                />
+                                <span className="min-w-0">
+                                  <span className="flex flex-wrap items-center gap-2">
+                                    <span className="block text-sm font-medium text-[var(--color-ink)]">{feature.name}</span>
+                                    <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
+                                      selected
+                                    </span>
+                                  </span>
+                                  <span className="mt-1 block text-xs text-[var(--color-muted)]">{feature.description}</span>
+                                </span>
+                              </label>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ))}
+                    ) : null}
+                    {availableAssignableFeatures.length > 0 ? (
+                      <div className={selectedAssignableFeatures.length > 0 ? "pt-2" : ""}>
+                        {selectedAssignableFeatures.length > 0 ? (
+                          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
+                            Available features
+                          </p>
+                        ) : null}
+                        <div className="space-y-3">
+                          {availableAssignableFeatures.map((feature) => (
+                            <div
+                              key={feature.key}
+                              className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel)] px-4 py-4"
+                            >
+                              <label className="flex items-start gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked={false}
+                                  className="mt-1 h-4 w-4 rounded border border-[var(--color-border)] accent-[var(--color-brand)]"
+                                  onChange={() => onToggleFeature(feature.key)}
+                                />
+                                <span className="min-w-0">
+                                  <span className="flex flex-wrap items-center gap-2">
+                                    <span className="block text-sm font-medium text-[var(--color-ink)]">{feature.name}</span>
+                                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${getFeatureBadgeClassName(feature.status)}`}>
+                                      {feature.status}
+                                    </span>
+                                  </span>
+                                  <span className="mt-1 block text-xs text-[var(--color-muted)]">{feature.description}</span>
+                                </span>
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     {upcomingFeatures.length > 0 ? (
                       <div className="pt-2">
                         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">

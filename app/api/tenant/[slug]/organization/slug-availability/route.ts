@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireOrganizationFeatureApiSession } from "../../../../../../lib/auth-guards";
+import { requireOrganizationFunctionalityApiSession } from "../../../../../../lib/auth-guards";
 import {
   isOrganizationSlugAvailable,
   isOrganizationSlugValid,
@@ -22,9 +22,15 @@ export async function GET(
   context: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await context.params;
-  const auth = await requireOrganizationFeatureApiSession(request, slug, "tenant_settings", {
+  const auth = await requireOrganizationFunctionalityApiSession(
+    request,
+    slug,
+    "tenant_settings",
+    "tenant_settings.slug_check",
+    {
     ownerOnly: true,
-  });
+    },
+  );
 
   if ("response" in auth) {
     return auth.response;

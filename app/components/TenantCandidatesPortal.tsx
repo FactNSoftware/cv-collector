@@ -3,6 +3,7 @@
 import { Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { CvSubmissionRecord } from "../../lib/cv-storage";
+import { isFunctionalityEnabled } from "../../lib/feature-catalog";
 import { CandidateCvPreviewModal } from "./CandidateCvPreviewModal";
 import { PortalShell } from "./PortalShell";
 
@@ -10,6 +11,7 @@ type Props = {
   sessionEmail: string;
   organizationSlug: string;
   tenantFeatureKeys: string[];
+  tenantFunctionalityKeys: string[];
   submissions: CvSubmissionRecord[];
 };
 
@@ -45,23 +47,29 @@ export function TenantCandidatesPortal({
   sessionEmail,
   organizationSlug,
   tenantFeatureKeys,
+  tenantFunctionalityKeys,
   submissions,
 }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activePreview, setActivePreview] = useState<CvSubmissionRecord | null>(null);
+  const canSearchCandidates = isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_candidates.search");
+  const canFilterCandidates = isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_candidates.status_filter");
+  const canPreviewCv = isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_candidates.cv_preview");
+  const canOpenProfile = isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_candidates.profile_open")
+    || isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_candidates.detail");
 
   const filtered = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = canSearchCandidates ? searchQuery.trim().toLowerCase() : "";
     return submissions.filter((sub) => {
-      if (statusFilter !== "all" && sub.reviewStatus !== statusFilter) return false;
+      if (canFilterCandidates && statusFilter !== "all" && sub.reviewStatus !== statusFilter) return false;
       if (!q) return true;
       return [sub.firstName, sub.lastName, sub.email, sub.jobTitle, sub.jobCode]
         .join(" ")
         .toLowerCase()
         .includes(q);
     });
-  }, [submissions, searchQuery, statusFilter]);
+  }, [canFilterCandidates, canSearchCandidates, submissions, searchQuery, statusFilter]);
 
   return (
     <PortalShell
@@ -86,23 +94,31 @@ export function TenantCandidatesPortal({
 
       <section className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-6 shadow-[var(--shadow-soft)]">
         <div className="mb-5 grid gap-3 md:grid-cols-[1fr_200px]">
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by name, email, or job"
-            className="h-11 rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[var(--color-focus-ring)]"
-          />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-11 rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[var(--color-focus-ring)]"
-          >
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+          {canSearchCandidates ? (
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name, email, or job"
+              className="h-11 rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[var(--color-focus-ring)]"
+            />
+          ) : (
+            <div className="flex items-center text-sm text-[var(--color-muted)]">
+              {filtered.length} candidate record{filtered.length === 1 ? "" : "s"} available.
+            </div>
+          )}
+          {canFilterCandidates ? (
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="h-11 rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[var(--color-focus-ring)]"
+            >
+              {STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          ) : null}
         </div>
 
         {filtered.length === 0 ? (
@@ -137,19 +153,23 @@ export function TenantCandidatesPortal({
                   <span className="text-xs text-[var(--color-muted)]">
                     {new Date(sub.submittedAt).toLocaleDateString()}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setActivePreview(sub)}
-                    className="inline-flex h-8 items-center rounded-xl border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-ink)] transition hover:bg-[var(--color-panel-strong)]"
-                  >
-                    View CV
-                  </button>
-                  <a
-                    href={`/admin/candidates/${sub.email}`}
-                    className="inline-flex h-8 items-center rounded-xl border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-ink)] transition hover:bg-[var(--color-panel-strong)]"
-                  >
-                    Profile
-                  </a>
+                  {canPreviewCv ? (
+                    <button
+                      type="button"
+                      onClick={() => setActivePreview(sub)}
+                      className="inline-flex h-8 items-center rounded-xl border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-ink)] transition hover:bg-[var(--color-panel-strong)]"
+                    >
+                      View CV
+                    </button>
+                  ) : null}
+                  {canOpenProfile ? (
+                    <a
+                      href={`/admin/candidates/${sub.email}`}
+                      className="inline-flex h-8 items-center rounded-xl border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-ink)] transition hover:bg-[var(--color-panel-strong)]"
+                    >
+                      Profile
+                    </a>
+                  ) : null}
                 </div>
               </div>
             ))}

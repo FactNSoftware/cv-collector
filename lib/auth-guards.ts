@@ -11,7 +11,7 @@ import {
   type OrganizationMembership,
   type OrganizationRecord,
 } from "./organizations";
-import { isFeatureEnabled } from "./feature-catalog";
+import { isFeatureEnabled, isFunctionalityEnabled } from "./feature-catalog";
 import {
   resolveOrganizationSubscriptionAccess,
   type EffectiveOrganizationSubscriptionAccess,
@@ -213,6 +213,25 @@ export const requireOrganizationFeaturePageSession = async (
   return access;
 };
 
+export const requireOrganizationFunctionalityPageSession = async (
+  organizationSlug: string,
+  featureKey: string,
+  functionalityKey: string,
+  options?: { ownerOnly?: boolean },
+): Promise<OrganizationPageSession> => {
+  const access = await requireOrganizationFeaturePageSession(
+    organizationSlug,
+    featureKey,
+    options,
+  );
+
+  if (!isFunctionalityEnabled(access.functionalityKeys, functionalityKey)) {
+    redirect(`/o/${organizationSlug}`);
+  }
+
+  return access;
+};
+
 export const requireSuperAdminPageSession = async (): Promise<AuthSession> => {
   const session = await requirePageSession();
   const isSuperAdmin = await isSuperAdminEmail(session.email);
@@ -323,6 +342,36 @@ export const requireOrganizationFeatureApiSession = async (
     return {
       response: NextResponse.json(
         { message: `Feature ${featureKey} is not available for this organization.` },
+        { status: 403 },
+      ),
+    };
+  }
+
+  return auth;
+};
+
+export const requireOrganizationFunctionalityApiSession = async (
+  request: Request,
+  organizationSlug: string,
+  featureKey: string,
+  functionalityKey: string,
+  options?: { ownerOnly?: boolean },
+): Promise<OrganizationApiAuthResult> => {
+  const auth = await requireOrganizationFeatureApiSession(
+    request,
+    organizationSlug,
+    featureKey,
+    options,
+  );
+
+  if ("response" in auth) {
+    return auth;
+  }
+
+  if (!isFunctionalityEnabled(auth.functionalityKeys, functionalityKey)) {
+    return {
+      response: NextResponse.json(
+        { message: `Functionality ${functionalityKey} is not available for this organization.` },
         { status: 403 },
       ),
     };

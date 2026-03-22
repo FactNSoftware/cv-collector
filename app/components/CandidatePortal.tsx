@@ -1,12 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { BriefcaseBusiness, FileText, ShieldCheck, UserRound } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  CheckCircle2,
+  Clock3,
+  FileText,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 import { useState } from "react";
 import type { CandidateProfile } from "../../lib/candidate-profile";
 import type { CvSubmissionRecord } from "../../lib/cv-storage";
 import { CandidateCvPreviewModal } from "./CandidateCvPreviewModal";
 import { PortalShell } from "./PortalShell";
+import {
+  DashboardEmptyState,
+  DashboardMetricCard,
+  DashboardPanel,
+} from "./PortalDashboardPrimitives";
 
 type CandidatePortalProps = {
   sessionEmail: string;
@@ -22,6 +34,14 @@ export function CandidatePortal({
   const [activePreview, setActivePreview] = useState<CvSubmissionRecord | null>(null);
   const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(" ") || "Candidate";
   const latestSubmission = submissions[0] ?? null;
+  const pendingCount = submissions.filter((submission) => submission.reviewStatus === "pending").length;
+  const acceptedCount = submissions.filter((submission) => submission.reviewStatus === "accepted").length;
+  const profileCompletionCount = [profile.phone, profile.idOrPassportNumber].filter(Boolean).length;
+  const profileCompletionLabel = profileCompletionCount === 2 ? "Complete" : "Needs attention";
+  const averageAtsScore = submissions.filter((submission) => submission.atsScore !== null);
+  const atsAverage = averageAtsScore.length > 0
+    ? Math.round(averageAtsScore.reduce((total, submission) => total + (submission.atsScore ?? 0), 0) / averageAtsScore.length)
+    : null;
 
   return (
     <PortalShell
@@ -33,115 +53,104 @@ export function CandidatePortal({
       primaryActionHref="/apply"
       primaryActionLabel="Apply for a Job"
     >
-      <div className="space-y-4">
-        <section className="grid gap-4 md:grid-cols-3">
-          <article className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-5 shadow-[var(--shadow-soft)]">
-            <p className="text-sm text-[var(--color-muted)]">Submitted applications</p>
-            <p className="mt-2 text-3xl font-semibold text-[var(--color-ink)]">{submissions.length}</p>
-          </article>
-          <article className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-5 shadow-[var(--shadow-soft)]">
-            <p className="text-sm text-[var(--color-muted)]">Profile status</p>
-            <p className="mt-2 text-lg font-semibold text-[var(--color-ink)]">
-              {profile.phone && profile.idOrPassportNumber ? "Complete" : "Needs attention"}
-            </p>
-          </article>
-          <article className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-5 shadow-[var(--shadow-soft)]">
-            <p className="text-sm text-[var(--color-muted)]">Profile updated</p>
-            <p className="mt-2 text-lg font-semibold text-[var(--color-ink)]">
-              {profile.updatedAt ? new Date(profile.updatedAt).toLocaleDateString() : "Not updated yet"}
-            </p>
-          </article>
+      <div className="space-y-6">
+        <section className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <DashboardMetricCard
+            icon={FileText}
+            label="Applications"
+            value={submissions.length}
+            helper={`${pendingCount} pending review`}
+          />
+          <DashboardMetricCard
+            icon={CheckCircle2}
+            label="Accepted"
+            value={acceptedCount}
+            helper={atsAverage === null ? "No ATS score yet" : `Average ATS ${atsAverage}%`}
+          />
+          <DashboardMetricCard
+            icon={ShieldCheck}
+            label="Profile"
+            value={profileCompletionLabel}
+            helper={profile.updatedAt ? `Updated ${new Date(profile.updatedAt).toLocaleDateString()}` : "Not updated yet"}
+          />
+          <DashboardMetricCard
+            icon={Clock3}
+            label="Latest CV"
+            value={latestSubmission ? "Ready" : "None"}
+            helper={latestSubmission?.resumeOriginalName || "Submit an application to store your CV"}
+          />
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-          <article className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-6 shadow-[var(--shadow-soft)]">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--color-brand-strong)]">
-                  Quick Links
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-[var(--color-ink)]">
-                  Choose what you want to do next
-                </h2>
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <Link href="/apply" className="rounded-[24px] border border-[var(--color-border)] bg-white p-5 transition hover:border-[var(--color-border-strong)]">
+        <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <DashboardPanel eyebrow="Quick Links" title="Choose what you want to do next">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Link href="/apply" className="rounded-[16px] border border-[var(--color-border)] bg-white p-5 transition hover:border-[var(--color-border-strong)]">
                 <BriefcaseBusiness className="h-5 w-5 text-[var(--color-brand)]" />
                 <h3 className="mt-4 text-lg font-semibold text-[var(--color-ink)]">New Job Application</h3>
                 <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">Browse current openings and submit a new CV.</p>
               </Link>
-              <Link href="/applications/history" className="rounded-[24px] border border-[var(--color-border)] bg-white p-5 transition hover:border-[var(--color-border-strong)]">
+              <Link href="/applications/history" className="rounded-[16px] border border-[var(--color-border)] bg-white p-5 transition hover:border-[var(--color-border-strong)]">
                 <FileText className="h-5 w-5 text-[var(--color-brand)]" />
-                <h3 className="mt-4 text-lg font-semibold text-[var(--color-ink)]">Applied Jobs</h3>
-                <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">Review every submitted application and preview your CV copies.</p>
+                <h3 className="mt-4 text-lg font-semibold text-[var(--color-ink)]">Application History</h3>
+                <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">Review submissions, statuses, and previous CV uploads.</p>
               </Link>
-              <Link href="/account" className="rounded-[24px] border border-[var(--color-border)] bg-white p-5 transition hover:border-[var(--color-border-strong)]">
+              <Link href="/account" className="rounded-[16px] border border-[var(--color-border)] bg-white p-5 transition hover:border-[var(--color-border-strong)]">
                 <UserRound className="h-5 w-5 text-[var(--color-brand)]" />
                 <h3 className="mt-4 text-lg font-semibold text-[var(--color-ink)]">Manage Profile</h3>
-                <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">Update your personal details once and reuse them for future applications.</p>
+                <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">Keep your details current for faster applications.</p>
               </Link>
-              <div className="rounded-[24px] border border-dashed border-[var(--color-border)] bg-white/70 p-5">
+              <div className="rounded-[16px] border border-dashed border-[var(--color-border)] bg-white p-5">
                 <ShieldCheck className="h-5 w-5 text-[var(--color-brand)]" />
                 <h3 className="mt-4 text-lg font-semibold text-[var(--color-ink)]">Session</h3>
                 <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">{sessionEmail}</p>
               </div>
             </div>
-          </article>
+          </DashboardPanel>
 
-          <article className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-6 shadow-[var(--shadow-soft)]">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--color-brand-strong)]">
-              Latest Activity
-            </p>
+          <DashboardPanel eyebrow="Latest Activity" title="Most recent submission">
             {latestSubmission ? (
-              <>
-                <h2 className="mt-2 text-2xl font-semibold text-[var(--color-ink)]">
+              <div className="rounded-[16px] border border-[var(--color-border)] bg-white p-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                    latestSubmission.reviewStatus === "accepted"
+                      ? "bg-emerald-100 text-emerald-800"
+                      : latestSubmission.reviewStatus === "rejected"
+                        ? "bg-rose-100 text-rose-800"
+                        : "bg-amber-100 text-amber-800"
+                  }`}>
+                    {latestSubmission.reviewStatus.charAt(0).toUpperCase() + latestSubmission.reviewStatus.slice(1)}
+                  </span>
+                  {latestSubmission.reviewedAt ? (
+                    <span className="text-xs text-[var(--color-muted)]">
+                      Reviewed on {new Date(latestSubmission.reviewedAt).toLocaleString()}
+                    </span>
+                  ) : null}
+                </div>
+                <h3 className="mt-4 text-lg font-semibold text-[var(--color-ink)]">
                   {latestSubmission.jobTitle || latestSubmission.jobOpening}
-                </h2>
+                </h3>
                 <p className="mt-2 text-sm leading-6 text-[var(--color-muted)]">
                   Submitted on {new Date(latestSubmission.submittedAt).toLocaleString()}
                 </p>
-                <div className="mt-5 rounded-[24px] border border-[var(--color-border)] bg-white p-5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                      latestSubmission.reviewStatus === "accepted"
-                        ? "bg-emerald-100 text-emerald-800"
-                        : latestSubmission.reviewStatus === "rejected"
-                          ? "bg-rose-100 text-rose-800"
-                          : "bg-amber-100 text-amber-800"
-                    }`}>
-                      {latestSubmission.reviewStatus.charAt(0).toUpperCase() + latestSubmission.reviewStatus.slice(1)}
-                    </span>
-                    {latestSubmission.reviewedAt ? (
-                      <span className="text-xs text-[var(--color-muted)]">
-                        Reviewed on {new Date(latestSubmission.reviewedAt).toLocaleString()}
-                      </span>
-                    ) : null}
+                <p className="mt-2 text-sm text-[var(--color-muted)]">{latestSubmission.resumeOriginalName}</p>
+                {latestSubmission.reviewStatus === "rejected" && latestSubmission.rejectionReason ? (
+                  <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                    <span className="font-medium">Rejection reason:</span> {latestSubmission.rejectionReason}
                   </div>
-                  <p className="text-sm font-medium text-[var(--color-ink)]">{latestSubmission.jobOpening}</p>
-                  <p className="mt-2 text-sm text-[var(--color-muted)]">{latestSubmission.resumeOriginalName}</p>
-                  {latestSubmission.reviewStatus === "rejected" && latestSubmission.rejectionReason ? (
-                    <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-                      <span className="font-medium">Rejection reason:</span> {latestSubmission.rejectionReason}
-                    </div>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => setActivePreview(latestSubmission)}
-                    className="mt-4 inline-flex rounded-2xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-ink)]"
-                  >
-                    View Latest CV
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="mt-4 rounded-[24px] border border-dashed border-[var(--color-border)] bg-white/70 p-6 text-sm leading-6 text-[var(--color-muted)]">
-                You have not submitted any applications yet. Start from the Apply page.
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setActivePreview(latestSubmission)}
+                  className="mt-4 inline-flex rounded-2xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-ink)]"
+                >
+                  View Latest CV
+                </button>
               </div>
+            ) : (
+              <DashboardEmptyState message="You have not submitted any applications yet. Start from the Apply page." />
             )}
-          </article>
-        </section>
+          </DashboardPanel>
+        </div>
       </div>
       <CandidateCvPreviewModal
         title={activePreview?.jobTitle || activePreview?.jobOpening || "CV Preview"}

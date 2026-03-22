@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   requireOrganizationFeatureApiSession,
 } from "../../../../../lib/auth-guards";
+import { isFunctionalityEnabled } from "../../../../../lib/feature-catalog";
 import { updateOrganizationProfile } from "../../../../../lib/organizations";
 import { validateOrganizationLogoUrl } from "../../../../../lib/job-assets";
 
@@ -31,6 +32,10 @@ export async function GET(
     return auth.response;
   }
 
+  if (!isFunctionalityEnabled(auth.functionalityKeys, "tenant_settings.organization_profile_view")) {
+    return NextResponse.json({ message: "Organization profile view is not available." }, { status: 403 });
+  }
+
   return NextResponse.json({ organization: auth.organization });
 }
 
@@ -49,9 +54,27 @@ export async function PATCH(
 
   try {
     const body = (await request.json()) as UpdateOrganizationPayload;
+    const functionalityKeys = auth.functionalityKeys;
+    const updatesProfileFields = ["name", "websiteUrl", "contactEmail", "contactPhone", "location", "description"]
+      .some((key) => Object.prototype.hasOwnProperty.call(body, key));
+    const updatesSlug = Object.prototype.hasOwnProperty.call(body, "slug");
     const logoUrl = Object.prototype.hasOwnProperty.call(body, "logoUrl")
       ? body.logoUrl
       : undefined;
+    const updatesLogoUrl = Object.prototype.hasOwnProperty.call(body, "logoUrl");
+
+    if (updatesProfileFields && !isFunctionalityEnabled(functionalityKeys, "tenant_settings.organization_profile")) {
+      return NextResponse.json({ message: "Organization profile editing is not available." }, { status: 403 });
+    }
+
+    if (updatesSlug && !isFunctionalityEnabled(functionalityKeys, "tenant_settings.slug_update")) {
+      return NextResponse.json({ message: "Portal slug updates are not available." }, { status: 403 });
+    }
+
+    if (updatesLogoUrl && !isFunctionalityEnabled(functionalityKeys, "tenant_settings.logo_url")) {
+      return NextResponse.json({ message: "Logo URL updates are not available." }, { status: 403 });
+    }
+
     const currentLogoUrl = auth.organization.logoUrl?.trim() ?? "";
     const nextLogoUrl = typeof logoUrl === "string" ? logoUrl.trim() : "";
 

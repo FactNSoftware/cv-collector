@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireOrganizationFeatureApiSession } from "../../../../../../lib/auth-guards";
+import { requireOrganizationFunctionalityApiSession } from "../../../../../../lib/auth-guards";
 import { getAppBaseUrl } from "../../../../../../lib/app-url";
 import {
   buildOrganizationRootOwnershipTransferredEmailTemplate,
@@ -23,9 +23,15 @@ export async function POST(
   context: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await context.params;
-  const auth = await requireOrganizationFeatureApiSession(request, slug, "tenant_settings", {
+  const auth = await requireOrganizationFunctionalityApiSession(
+    request,
+    slug,
+    "tenant_settings",
+    "tenant_settings.root_owner_transfer",
+    {
     ownerOnly: true,
-  });
+    },
+  );
 
   if ("response" in auth) {
     return auth.response;

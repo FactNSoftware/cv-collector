@@ -10,7 +10,7 @@ type Props = { params: Promise<{ slug: string }> };
 
 export default async function TenantSettingsPage({ params }: Props) {
   const { slug } = await params;
-  const { session, organization, membership, isSuperAdmin, featureKeys } =
+  const { session, organization, membership, isSuperAdmin, featureKeys, functionalityKeys } =
     await requireOrganizationFeaturePageSession(slug, "tenant_settings");
 
   const isOwner = isSuperAdmin || membership?.role === "owner";
@@ -31,6 +31,7 @@ export default async function TenantSettingsPage({ params }: Props) {
       initialSettings={settings}
       platformHost={platformHost}
       tenantFeatureKeys={featureKeys}
+      tenantFunctionalityKeys={functionalityKeys}
     />
   );
 }

@@ -3,6 +3,7 @@ import {
   requireOrganizationFeatureApiSession,
 } from "../../../../../lib/auth-guards";
 import { getAppBaseUrl } from "../../../../../lib/app-url";
+import { isFunctionalityEnabled } from "../../../../../lib/feature-catalog";
 import {
   buildOrganizationRoleAssignedEmailTemplate,
 } from "../../../../../lib/organization-membership-email-template";
@@ -26,6 +27,10 @@ export async function GET(
 
   if ("response" in auth) {
     return auth.response;
+  }
+
+  if (!isFunctionalityEnabled(auth.functionalityKeys, "tenant_settings.members_list")) {
+    return NextResponse.json({ message: "Administrator list is not available." }, { status: 403 });
   }
 
   const members = await listOrganizationMemberships(auth.organization.id);
@@ -64,6 +69,17 @@ export async function POST(
       auth.organization.id,
       email,
     );
+
+    const requiredFunctionality = existingMembership
+      ? "tenant_settings.members_role_update"
+      : "tenant_settings.members_invite";
+
+    if (!isFunctionalityEnabled(auth.functionalityKeys, requiredFunctionality)) {
+      return NextResponse.json(
+        { message: existingMembership ? "Member role updates are not available." : "Member invites are not available." },
+        { status: 403 },
+      );
+    }
 
     const membership = await upsertOrganizationMembership({
       organizationId: auth.organization.id,

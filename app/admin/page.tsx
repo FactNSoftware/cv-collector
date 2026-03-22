@@ -37,6 +37,7 @@ export default async function AdminPage() {
       sessionEmail={session.email}
       initialAdmins={admins}
       initialUsers={users}
+      submissions={submissions}
       jobCount={jobs.length}
     />
   );

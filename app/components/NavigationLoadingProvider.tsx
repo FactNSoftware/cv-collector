@@ -35,7 +35,6 @@ export function NavigationLoadingProvider({
   children: ReactNode;
 }) {
   const pathname = usePathname();
-  const [isNavigating, setIsNavigating] = useState(false);
   const [barVisible, setBarVisible] = useState(false);
   const timeoutRef = useRef<number | null>(null);
   const settleTimeoutRef = useRef<number | null>(null);
@@ -52,7 +51,6 @@ export function NavigationLoadingProvider({
     }
 
     settleTimeoutRef.current = window.setTimeout(() => {
-      setIsNavigating(false);
       setBarVisible(false);
       settleTimeoutRef.current = null;
     }, 220);
@@ -68,11 +66,9 @@ export function NavigationLoadingProvider({
       settleTimeoutRef.current = null;
     }
 
-    setIsNavigating(true);
     setBarVisible(true);
 
     timeoutRef.current = window.setTimeout(() => {
-      setIsNavigating(false);
       setBarVisible(false);
       timeoutRef.current = null;
     }, 8000);
@@ -154,13 +150,7 @@ export function NavigationLoadingProvider({
 
   return (
     <NavigationLoadingContext.Provider value={value}>
-      <div
-        className={`transition-[opacity,transform,filter] duration-200 ease-out ${
-          isNavigating ? "opacity-[0.985] translate-y-[1px] saturate-[0.985]" : "opacity-100 translate-y-0"
-        }`}
-      >
-        {children}
-      </div>
+      {children}
       <div
         aria-hidden="true"
         className={`pointer-events-none fixed inset-x-0 top-0 z-[70] h-20 transition-opacity duration-200 ${

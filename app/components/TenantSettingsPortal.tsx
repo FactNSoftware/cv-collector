@@ -1,6 +1,6 @@
 "use client";
 
-import React, { ChangeEvent, FormEvent, useState } from "react";
+import React, { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -26,12 +26,18 @@ import type {
   TenantTheme,
   EmailDomainDnsRecord,
 } from "../../lib/organization-branding";
+import { isFunctionalityEnabled } from "../../lib/feature-catalog";
 import { toTenantCssVariables, getEmailDomainDnsRecords } from "../../lib/organization-branding";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { PortalShell } from "./PortalShell";
 import { useToast } from "./ToastProvider";
 
 type Tab = "details" | "theme" | "members";
+type TabDefinition = {
+  id: Tab;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+};
 
 type DomainPhase = "idle" | "pending" | "verified";
 
@@ -63,6 +69,7 @@ type Props = {
   platformHost: string;
   backHref?: string;
   tenantFeatureKeys?: string[];
+  tenantFunctionalityKeys?: string[];
 };
 
 const DEFAULT_THEME: TenantTheme = {
@@ -230,6 +237,7 @@ export function TenantSettingsPortal({
   platformHost,
   backHref,
   tenantFeatureKeys,
+  tenantFunctionalityKeys = [],
 }: Props) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -869,6 +877,37 @@ export function TenantSettingsPortal({
   const normalizedSessionEmail = sessionEmail.trim().toLowerCase();
   const currentUserMembership = members.find((member) => member.email === normalizedSessionEmail);
   const isCurrentUserRootOwner = Boolean(currentUserMembership?.isRootOwner);
+  const canViewOrganizationProfile = isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.organization_profile_view")
+    || isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.organization_profile");
+  const canEditOrganizationProfile = isOwner && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.organization_profile");
+  const canUploadLogo = isOwner && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.logo_upload");
+  const canUseLogoUrl = isOwner && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.logo_url");
+  const canCheckSlug = isOwner && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.slug_check");
+  const canUpdateSlug = isOwner && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.slug_update");
+  const canManageTabTitle = isOwner && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.tab_title");
+  const canManageTabIcon = isOwner && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.tab_icon");
+  const canManageBrowserBranding = canManageTabTitle || canManageTabIcon;
+  const canManageCustomDomain = isOwner && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.custom_domain");
+  const canManageCustomEmailDomain = isOwner && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.custom_email_domain");
+  const canManageEmailSenderName = isOwner && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.custom_email_sender_name");
+  const canViewMembers = isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.members_list")
+    || isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.members");
+  const canInviteMembers = isOwner && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.members_invite");
+  const canUpdateMemberRoles = isOwner && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.members_role_update");
+  const canRemoveMembers = isOwner && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.members_remove");
+  const canTransferRootOwnership = isOwner && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.root_owner_transfer");
+  const canManageTheme = isOwner && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_settings.theme_customization");
+  const availableTabs: Tab[] = [
+    (canViewOrganizationProfile || canManageCustomDomain || canManageCustomEmailDomain || canManageBrowserBranding) ? "details" : null,
+    canManageTheme ? "theme" : null,
+    canViewMembers ? "members" : null,
+  ].filter((value): value is Tab => value !== null);
+
+  useEffect(() => {
+    if (!availableTabs.includes(tab) && availableTabs.length > 0) {
+      setTab(availableTabs[0]);
+    }
+  }, [availableTabs, tab]);
 
   const submitInvite = async (email: string, role: OrganizationRole) => {
     setIsInviting(true);
@@ -914,6 +953,18 @@ export function TenantSettingsPortal({
 
     if (!email) {
       showToast("Email is required.", "error");
+      return;
+    }
+
+    const existingMember = members.find((member) => member.email === email);
+
+    if (existingMember) {
+      if (!canUpdateMemberRoles) {
+        showToast("Member role updates are not available for this subscription.", "warning");
+        return;
+      }
+    } else if (!canInviteMembers) {
+      showToast("Member invites are not available for this subscription.", "warning");
       return;
     }
 
@@ -971,15 +1022,13 @@ export function TenantSettingsPortal({
   };
 
   // ── Tab config ─────────────────────────────────────────────────────────────
-  const TABS: Array<{
-    id: Tab;
-    label: string;
-    icon: React.ComponentType<{ className?: string }>;
-  }> = [
+  const tabDefinitions: TabDefinition[] = [
     { id: "details", label: "Details", icon: Building2 },
     { id: "theme", label: "Theme", icon: Palette },
     { id: "members", label: "Administrators", icon: Users },
   ];
+
+  const TABS: TabDefinition[] = tabDefinitions.filter((item) => availableTabs.includes(item.id));
 
   return (
     <PortalShell
@@ -1077,7 +1126,7 @@ export function TenantSettingsPortal({
             <h2 className="mb-4 text-base font-semibold text-[var(--color-ink)]">
               Organization details
             </h2>
-            {isOwner ? (
+            {canEditOrganizationProfile || canUploadLogo || canUseLogoUrl ? (
               <form onSubmit={handleSaveOrganizationProfile} className="grid gap-4 sm:grid-cols-2">
                 <label className="sm:col-span-2 text-sm font-medium text-[var(--color-ink)]">
                   Organization name
@@ -1098,6 +1147,7 @@ export function TenantSettingsPortal({
                   <div className="mt-2 flex gap-2">
                     <button
                       type="button"
+                      disabled={!canUploadLogo}
                       onClick={() => {
                         setLogoInputMode("file");
                         // Clear any URL-mode draft value so stale text doesn't
@@ -1114,6 +1164,7 @@ export function TenantSettingsPortal({
                     </button>
                     <button
                       type="button"
+                      disabled={!canUseLogoUrl}
                       onClick={() => {
                         setLogoInputMode("url");
                         // When switching to URL mode restore the saved URL so
@@ -1277,7 +1328,7 @@ export function TenantSettingsPortal({
                   </p>
                   <button
                     type="submit"
-                    disabled={isSavingOrganization}
+                    disabled={isSavingOrganization || !canEditOrganizationProfile}
                     className="theme-btn-primary inline-flex h-10 items-center rounded-xl px-5 text-sm font-medium disabled:opacity-70"
                   >
                     {isSavingOrganization ? "Saving..." : "Save organization details"}
@@ -1355,7 +1406,7 @@ export function TenantSettingsPortal({
               {/* Slug */}
               <div>
                 <p className="mb-1.5 text-sm font-medium text-[var(--color-ink)]">Organization slug</p>
-                {isOwner && domainPhase !== "verified" ? (
+                {canUpdateSlug && domainPhase !== "verified" ? (
                   <>
                     <div className="flex gap-2">
                       <input
@@ -1377,7 +1428,7 @@ export function TenantSettingsPortal({
                       <button
                         type="button"
                         onClick={() => void checkSlugAvailability()}
-                        disabled={slugCheckState.status === "checking" || !normalizedDraftSlug}
+                        disabled={!canCheckSlug || slugCheckState.status === "checking" || !normalizedDraftSlug}
                         className="inline-flex h-10 items-center rounded-xl border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-panel-strong)] disabled:opacity-60"
                       >
                         {slugCheckState.status === "checking" ? "Checking..." : "Check"}
@@ -1398,7 +1449,7 @@ export function TenantSettingsPortal({
                       </p>
                     )}
                   </>
-                ) : isOwner ? (
+                ) : canViewOrganizationProfile ? (
                   <div className="flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-panel-strong)] px-3 py-2.5">
                     <Lock className="h-3.5 w-3.5 shrink-0 text-[var(--color-muted)]" />
                     <code className="flex-1 font-mono text-sm text-[var(--color-ink)]">{organization.slug}</code>
@@ -1406,7 +1457,7 @@ export function TenantSettingsPortal({
                 ) : (
                   <code className="block rounded-xl border border-[var(--color-border)] bg-[var(--color-panel-strong)] px-3 py-2.5 font-mono text-sm text-[var(--color-ink)]">{organization.slug}</code>
                 )}
-                {isOwner && domainPhase === "verified" && (
+                {canViewOrganizationProfile && domainPhase === "verified" && (
                   <p className="mt-1.5 text-xs text-[var(--color-muted)]">
                     Slug is locked while a custom domain is active. Remove the custom domain to change the slug.
                   </p>
@@ -1446,7 +1497,7 @@ export function TenantSettingsPortal({
               </div>
 
               {/* Save slug — shown only when draft differs from saved slug and no domain lock */}
-              {isOwner && domainPhase !== "verified" && normalizedDraftSlug && normalizedDraftSlug !== organization.slug && (
+              {canUpdateSlug && domainPhase !== "verified" && normalizedDraftSlug && normalizedDraftSlug !== organization.slug && (
                 <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
                   <p className="text-xs text-amber-800">
                     Changing the slug updates your portal URL. Your session will continue — no re-login needed.
@@ -1470,7 +1521,7 @@ export function TenantSettingsPortal({
               When the organization host or custom domain is opened, the browser tab title and icon will use these values. If left empty, the portal falls back to the organization name and logo.
             </p>
 
-            {isOwner ? (
+            {canManageBrowserBranding ? (
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="text-sm font-medium text-[var(--color-ink)]">
                   Tab title
@@ -1478,6 +1529,7 @@ export function TenantSettingsPortal({
                     type="text"
                     value={tabTitleInput}
                     onChange={(event) => setTabTitleInput(event.target.value)}
+                    disabled={!canManageTabTitle}
                     placeholder={organization.name}
                     className="mt-2 h-10 w-full rounded-xl border border-[var(--color-border)] bg-white px-3 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[var(--color-focus-ring)]"
                   />
@@ -1492,6 +1544,7 @@ export function TenantSettingsPortal({
                     type="url"
                     value={tabIconUrlInput}
                     onChange={(event) => setTabIconUrlInput(event.target.value)}
+                    disabled={!canManageTabIcon}
                     placeholder={organization.logoUrl ?? "https://cdn.example.com/favicon.png"}
                     className="mt-2 h-10 w-full rounded-xl border border-[var(--color-border)] bg-white px-3 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[var(--color-focus-ring)]"
                   />
@@ -1500,6 +1553,7 @@ export function TenantSettingsPortal({
                       <button
                         type="button"
                         onClick={() => setTabIconUrlInput(organizationDraft.logoUrl.trim())}
+                        disabled={!canManageTabIcon}
                         className="inline-flex h-9 items-center rounded-xl border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-panel-strong)]"
                       >
                         Use organization logo
@@ -1508,6 +1562,7 @@ export function TenantSettingsPortal({
                     <button
                       type="button"
                       onClick={() => setTabIconUrlInput("")}
+                      disabled={!canManageTabIcon}
                       className="inline-flex h-9 items-center rounded-xl border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-muted)] transition hover:bg-[var(--color-panel-strong)]"
                     >
                       Clear icon
@@ -1537,7 +1592,7 @@ export function TenantSettingsPortal({
                   <button
                     type="button"
                     onClick={() => void handleSaveBrowserBranding()}
-                    disabled={isSavingBrowserBranding}
+                    disabled={isSavingBrowserBranding || !canManageBrowserBranding}
                     className="theme-btn-primary inline-flex h-10 items-center rounded-xl px-5 text-sm font-medium disabled:opacity-70"
                   >
                     {isSavingBrowserBranding ? "Saving..." : "Save browser branding"}
@@ -1571,7 +1626,7 @@ export function TenantSettingsPortal({
             </div>
 
             {/* ── Phase: IDLE — enter domain ─────────────────────────────── */}
-            {isOwner && domainPhase === "idle" && (
+            {canManageCustomDomain && domainPhase === "idle" && (
               <>
                 <p className="mb-4 text-sm text-[var(--color-muted)]">
                   Connect your own domain (e.g.{" "}
@@ -1602,7 +1657,7 @@ export function TenantSettingsPortal({
             )}
 
             {/* ── Phase: PENDING — DNS instructions + verify ─────────────── */}
-            {isOwner && domainPhase === "pending" && (
+            {canManageCustomDomain && domainPhase === "pending" && (
               <>
                 {/* Domain chip + change */}
                 <div className="mb-5 flex flex-wrap items-center gap-3">
@@ -1747,7 +1802,7 @@ export function TenantSettingsPortal({
             )}
 
             {/* ── Phase: VERIFIED — active domain ───────────────────────── */}
-            {isOwner && domainPhase === "verified" && (
+            {canManageCustomDomain && domainPhase === "verified" && (
               <>
                 <div className="mb-4 flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-1.5">
@@ -1799,7 +1854,7 @@ export function TenantSettingsPortal({
             )}
 
             {/* ── Non-owner read-only view ───────────────────────────────── */}
-            {!isOwner && (
+            {!canManageCustomDomain && (
               domainPhase === "verified" ? (
                 <div className="mt-3 flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -1842,7 +1897,7 @@ export function TenantSettingsPortal({
             </p>
 
             {/* ── Phase: IDLE — no domain saved ─────────────────────────── */}
-            {isOwner && emailDomainPhase === "idle" && (
+            {canManageCustomEmailDomain && emailDomainPhase === "idle" && (
               <div className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
@@ -1866,6 +1921,7 @@ export function TenantSettingsPortal({
                       placeholder="Acme Careers"
                       value={emailSenderNameInput}
                       onChange={(e) => setEmailSenderNameInput(e.target.value)}
+                      disabled={!canManageEmailSenderName}
                       className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-white px-3 text-sm outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[var(--color-focus-ring)]"
                     />
                   </div>
@@ -1882,7 +1938,7 @@ export function TenantSettingsPortal({
             )}
 
             {/* ── Phase: PENDING — DNS records to configure ─────────────── */}
-            {isOwner && emailDomainPhase === "pending" && (
+            {canManageCustomEmailDomain && emailDomainPhase === "pending" && (
               <>
                 <div className="mb-4 flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5">
@@ -1981,7 +2037,7 @@ export function TenantSettingsPortal({
             )}
 
             {/* ── Phase: VERIFIED — active email domain ─────────────────── */}
-            {isOwner && emailDomainPhase === "verified" && (
+            {canManageCustomEmailDomain && emailDomainPhase === "verified" && (
               <>
                 <div className="mb-4 flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-1.5">
@@ -2024,7 +2080,7 @@ export function TenantSettingsPortal({
             )}
 
             {/* ── Non-owner read-only view ───────────────────────────────── */}
-            {!isOwner && (
+            {!canManageCustomEmailDomain && (
               emailDomainPhase === "verified" ? (
                 <div className="mt-3 flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -2067,7 +2123,7 @@ export function TenantSettingsPortal({
             immediately after saving.
           </p>
 
-          {!isOwner && (
+          {!canManageTheme && (
             <p className="mb-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel-strong)] px-4 py-3 text-sm text-[var(--color-muted)]">
               Only owners can edit the theme.
             </p>
@@ -2085,7 +2141,7 @@ export function TenantSettingsPortal({
                   <button
                     key={preset.id}
                     type="button"
-                    disabled={!isOwner}
+                    disabled={!canManageTheme}
                     onClick={() => {
                       setSelectedPreset(preset.id);
                       setThemeDraft({ ...preset.colors });
@@ -2161,7 +2217,7 @@ export function TenantSettingsPortal({
                     <div className="mt-2 grid grid-cols-[44px_minmax(0,1fr)] gap-2">
                       <input
                         type="color"
-                        disabled={!isOwner}
+                        disabled={!canManageTheme}
                         value={isHexColor(value) ? value : DEFAULT_THEME[field.key]}
                         onChange={(e) =>
                           handleThemeColorChange(field.key, e.target.value)
@@ -2169,7 +2225,7 @@ export function TenantSettingsPortal({
                         className="h-11 w-11 cursor-pointer rounded-lg border border-[var(--color-border)] bg-white p-1 disabled:cursor-not-allowed disabled:opacity-40"
                       />
                       <input
-                        disabled={!isOwner}
+                        disabled={!canManageTheme}
                         value={value}
                         onChange={(e) =>
                           setThemeDraft((cur) => ({
@@ -2289,7 +2345,7 @@ export function TenantSettingsPortal({
                 </div>
               </div>
 
-              {isOwner && (
+              {canManageTheme && (
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -2361,7 +2417,7 @@ export function TenantSettingsPortal({
                   </p>
                 </div>
                 <RoleBadge role={member.role} />
-                {isOwner && isCurrentUserRootOwner && member.role === "owner" && !member.isRootOwner && (
+                {canTransferRootOwnership && isCurrentUserRootOwner && member.role === "owner" && !member.isRootOwner && (
                   <button
                     type="button"
                     onClick={() => setPendingTransferEmail(member.email)}
@@ -2370,7 +2426,7 @@ export function TenantSettingsPortal({
                     Make root
                   </button>
                 )}
-                {isOwner && member.email !== normalizedSessionEmail && !member.isRootOwner && (
+                {canRemoveMembers && member.email !== normalizedSessionEmail && !member.isRootOwner && (
                   <button
                     type="button"
                     onClick={() => setPendingRemoveEmail(member.email)}
@@ -2389,13 +2445,13 @@ export function TenantSettingsPortal({
             )}
           </div>
 
-          {isOwner && (
+          {canTransferRootOwnership && (
             <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
               Root owner cannot be removed. Only the current root owner can transfer root ownership to another owner.
             </p>
           )}
 
-          {isOwner && (
+          {canInviteMembers && (
             <form
               onSubmit={handleInvite}
               className="mt-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel-strong)] p-4"

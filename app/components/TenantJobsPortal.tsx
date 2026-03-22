@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Briefcase, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { JobRecord } from "../../lib/jobs";
+import { isFunctionalityEnabled } from "../../lib/feature-catalog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { PortalShell } from "./PortalShell";
 import { useToast } from "./ToastProvider";
@@ -12,6 +13,7 @@ type Props = {
   sessionEmail: string;
   organizationSlug: string;
   tenantFeatureKeys: string[];
+  tenantFunctionalityKeys: string[];
   jobs: JobRecord[];
   isOwnerOrAdmin: boolean;
 };
@@ -32,6 +34,7 @@ export function TenantJobsPortal({
   sessionEmail,
   organizationSlug,
   tenantFeatureKeys,
+  tenantFunctionalityKeys,
   jobs: initialJobs,
   isOwnerOrAdmin,
 }: Props) {
@@ -40,8 +43,15 @@ export function TenantJobsPortal({
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const canSearchJobs = isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_jobs.search");
+  const canPreviewJobs = isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_jobs.preview");
+  const canCreateJobs = isOwnerOrAdmin && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_jobs.create");
+  const canEditJobs = isOwnerOrAdmin && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_jobs.edit");
+  const canPublishJobs = isOwnerOrAdmin && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_jobs.publish");
+  const canDeleteJobs = isOwnerOrAdmin && isFunctionalityEnabled(tenantFunctionalityKeys, "tenant_jobs.delete");
 
   const filtered = jobs.filter((job) => {
+    if (!canSearchJobs) return true;
     const q = searchQuery.trim().toLowerCase();
     if (!q) return true;
     return (
@@ -121,13 +131,19 @@ export function TenantJobsPortal({
 
       <section className="rounded-[28px] border border-[var(--color-border-strong)] bg-[var(--color-panel)] p-6 shadow-[var(--shadow-soft)]">
         <div className="mb-5 flex flex-wrap items-center gap-3">
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by title, code, or department"
-            className="h-11 flex-1 rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[var(--color-focus-ring)]"
-          />
-          {isOwnerOrAdmin && (
+          {canSearchJobs ? (
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by title, code, or department"
+              className="h-11 flex-1 rounded-2xl border border-[var(--color-border)] bg-white px-4 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-brand-strong)] focus:ring-4 focus:ring-[var(--color-focus-ring)]"
+            />
+          ) : (
+            <div className="flex-1 text-sm text-[var(--color-muted)]">
+              {filtered.length} job posting{filtered.length === 1 ? "" : "s"} available.
+            </div>
+          )}
+          {canCreateJobs && (
             <Link
               href={`/o/${organizationSlug}/jobs/new`}
               className="theme-btn-primary inline-flex h-11 items-center gap-2 rounded-2xl px-4 text-sm font-medium"
@@ -144,7 +160,7 @@ export function TenantJobsPortal({
             <p className="text-base font-medium text-[var(--color-ink)]">
               {jobs.length === 0 ? "No jobs yet" : "No jobs match your search"}
             </p>
-            {jobs.length === 0 && isOwnerOrAdmin && (
+            {jobs.length === 0 && canCreateJobs && (
               <Link
                 href={`/o/${organizationSlug}/jobs/new`}
                 className="theme-btn-primary mt-2 inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-medium"
@@ -179,38 +195,46 @@ export function TenantJobsPortal({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Link
-                    href={`/admin/jobs/${job.id}/preview`}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-ink)] transition hover:bg-[var(--color-panel-strong)]"
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                    Preview
-                  </Link>
+                  {canPreviewJobs ? (
+                    <Link
+                      href={`/admin/jobs/${job.id}/preview`}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-ink)] transition hover:bg-[var(--color-panel-strong)]"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      Preview
+                    </Link>
+                  ) : null}
 
                   {isOwnerOrAdmin && (
                     <>
-                      <Link
-                        href={`/o/${organizationSlug}/jobs/${job.id}/edit`}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-ink)] transition hover:bg-[var(--color-panel-strong)]"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                        Edit
-                      </Link>
-                      <button
-                        type="button"
-                        disabled={togglingId === job.id}
-                        onClick={() => handleTogglePublish(job)}
-                        className="inline-flex h-8 items-center rounded-xl border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-ink)] transition hover:bg-[var(--color-panel-strong)] disabled:opacity-60"
-                      >
-                        {job.isPublished ? "Unpublish" : "Publish"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPendingDeleteId(job.id)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-muted)] transition hover:border-red-300 hover:bg-red-50 hover:text-red-600"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {canEditJobs ? (
+                        <Link
+                          href={`/o/${organizationSlug}/jobs/${job.id}/edit`}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-ink)] transition hover:bg-[var(--color-panel-strong)]"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </Link>
+                      ) : null}
+                      {canPublishJobs ? (
+                        <button
+                          type="button"
+                          disabled={togglingId === job.id}
+                          onClick={() => handleTogglePublish(job)}
+                          className="inline-flex h-8 items-center rounded-xl border border-[var(--color-border)] px-3 text-xs font-medium text-[var(--color-ink)] transition hover:bg-[var(--color-panel-strong)] disabled:opacity-60"
+                        >
+                          {job.isPublished ? "Unpublish" : "Publish"}
+                        </button>
+                      ) : null}
+                      {canDeleteJobs ? (
+                        <button
+                          type="button"
+                          onClick={() => setPendingDeleteId(job.id)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-muted)] transition hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
                     </>
                   )}
                 </div>
